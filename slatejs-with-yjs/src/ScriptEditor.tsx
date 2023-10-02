@@ -12,7 +12,7 @@ import { CustomElement, CustomText, SlateScript } from "./types/SlateScript";
 import * as ScriptRenderers from "./ScriptRenderers";
 import * as OctopusScriptMapper from "./mappers/OctopusScriptMapper";
 import * as SlateScriptMapper from "./mappers/SlateScriptMapper";
-import { withYjs, slateNodesToInsertDelta, YjsEditor, translateYjsEvent} from 'slate-yjs-mkr/core';
+import { withYjs, slateNodesToInsertDelta, YjsEditor, translateYjsEvent } from 'slate-yjs-mkr/core';
 import mitt, { Emitter, EventType } from "mitt";
 
 declare module 'slate' {
@@ -47,42 +47,108 @@ const isMarkActive = (editor: Editor, format: string) => {
     return marks ? marks[format] === true : false
 }
 
-const emitter: Emitter<Record<EventType, unknown>> = mitt();
-
+//Legacy script
 let sharedOctopusScript = getTestScript();
-let sharedSlateScript = SlateScriptMapper.mapOctopusScriptToSlateScript(sharedOctopusScript)
+//Slate script
+let sharedSlateScript = SlateScriptMapper.mapOctopusScriptToSlateScript(sharedOctopusScript);
+//Slate script to insert Delats for YJS;
+const initialInsertDeltas = slateNodesToInsertDelta(sharedSlateScript);
 
+//YJS CRDT
+const initialYDoc = new Y.Doc()
+//Correct data type fo SlateJS is XMLText
+const initialSharedDoc = initialYDoc.get("content", Y.XmlText) as Y.XmlText;
+// Load the initial value into the yjs document
+initialSharedDoc.applyDelta(initialInsertDeltas);
 interface Props { }
 
+//SIMPLE Emitter to emit and listen to YJS Updates within the window ...
+const mit = mitt();
+
 export const ScriptEditor: React.FC<Props> = () => {
-    
+
     // Create a yjs document and get the shared type
     const sharedType = useMemo(() => {
-        const yDoc = new Y.Doc()
-        const sharedType = yDoc.get("content", Y.XmlText) as Y.XmlText;
+        const yDoc = new Y.Doc();
+        const sharedType = yDoc.get("content", Y.XmlText) as Y.XmlText;        
+        
+        //NOTE: Initialze the doc from the same source and so, upcoming changes will have a shared starting tracking point.. otherwise the initial merge can be a mess and also applyUpdate(event) will not work ...
+        const update = Y.encodeStateAsUpdate(initialYDoc);
+        Y.applyUpdate(sharedType.doc, update);
         // Load the initial value into the yjs document
-        sharedType.applyDelta(slateNodesToInsertDelta(sharedSlateScript));
         console.log("SHARED TYPE:" + sharedType.toJSON());
         console.log("Client ID is: " + yDoc.clientID);
 
+        /**
+         * NOTE: THIS IS TO BE IMPLEMENTED IN REMOTE JAVA CLIENT. IT HAS TO OBSERVE AND AND PROPERLY APPLY CHANGES.
+        */
         sharedType.observeDeep((event, transaction) => {
             console.log("OBSERVING Document change - EVENT/TRANSACTION:", event, transaction);
-            let ops = translateYjsEvent(sharedType, editor, event[0]);
-            console.log("OPERATIONS extracted from the document observation:", ops);
+            if (!transaction.local) {
+                //NOTE: ATTEMPT TO READ OPS HERE - i.e. when transaction is REMOTE (see below) ENDS UP IN NOT MERGING A DOC PROPERLY ... 
+                console.log("REMOTE TRANSACTION OBSERVED")
+            }
+            else {
+                let ops = translateYjsEvent(sharedType, editor, event[0]);
+                console.log("LOCAL TRANSACTION OBSERVED");
+                console.log("OPERATIONS extracted from the document observation in client :" + yDoc.clientID, ops);
+            }
+        });
+
+
+        yDoc.on("update", (updateEvent) => {
+            emitter.emit(yDoc.clientID.toString(), updateEvent);
         });
 
         return sharedType
     }, []);
 
-    const editor = useMemo(() => withYjs(withReact(createEditor()), sharedType), []);
+    //NOTE: Editor initialization
+    const [editor, setEditor] = useState(() => {
+        const slateJSWithYJSEditor: BaseEditor & ReactEditor = withYjs(withReact(createEditor()), sharedType);
+
+        //NOTE: Editors change listener - just for logging, to see how changes flow
+        /*
+        const { onChange } = slateJSWithYJSEditor;
+        slateJSWithYJSEditor.onChange = (change) => {
+            console.log("CATCHING EDITOR CHANGE", change);
+            if (change != null) {
+                console.log("CHANGE IN PROGRESS. CHANGE ", change);
+            }
+            onChange(change);
+        }
+        */
+
+        return slateJSWithYJSEditor;
+    });
+
+    //SlateJS'doc value. Initially empty. It is automatically filled from YJS CRDT Doc. 
     const [value, setValue] = useState<Node[]>([]);
 
+    //NOTE: Listening to "remote" (i.e other editors') changes emmited as YJS Updates and applying them as YJS Updates
+    const emitter: Emitter<Record<EventType, unknown>> = useMemo(() => {
+        console.log("Initiating Emitter for " + sharedType.doc.clientID);
+        mit.on("*", (clientId, updateEvent: Uint8Array) => {
+            console.log("Incomming Event. I am " + sharedType.doc.clientID.toString() + ", event is coming from " + clientId.toString());
+            if (clientId !== sharedType.doc.clientID.toString()) {
+                console.log("Caught incoming event from client ID " + clientId.toString() + " with following update event: ", updateEvent, "Update will now be applied");
+                Y.applyUpdate(sharedType.doc, updateEvent);
+            }
+            else console.log ("Ignoring my own event");
+        });
+
+        return mit
+    }, []
+    );
+
+    //Link YJS to SlateJS
     useEffect(() => {
-        console.log("EFFFECT");
         YjsEditor.connect(editor);
         return () => YjsEditor.disconnect(editor);
     }, [editor]);
+    
 
+    //Element renderer callbacks
     const renderElement = useCallback(({ attributes, children, element }) => {
         switch (element.type) {
             case 'STUDIO':
@@ -92,6 +158,7 @@ export const ScriptEditor: React.FC<Props> = () => {
         }
     }, []);
 
+    //Paragraph renderer callbacks
     const renderParagraph = useCallback(({ attributes, children, leaf }) => {
         switch (leaf.type) {
             case 'tag':
@@ -101,6 +168,7 @@ export const ScriptEditor: React.FC<Props> = () => {
         }
     }, []);
 
+    //Keys listener. Mainly stops <Enter> from creating a new paragraph resulting in Legacy Octopus behavior. Also listens for hotkeys.
     const slateKeyDownEvent = (event: React.KeyboardEvent) => {
         for (const hotkey in HOTKEYS) {
             if (isHotkey(hotkey, event as any)) {
@@ -125,6 +193,7 @@ export const ScriptEditor: React.FC<Props> = () => {
         }
     };
 
+    //Adding a new Sript Element into slate's doc - for testing purposes.
     const onNewElementButtonClick = () => {
         const op: InsertNodeOperation = {
             type: 'insert_node',
@@ -134,6 +203,7 @@ export const ScriptEditor: React.FC<Props> = () => {
         editor.apply(op);
     };
 
+    //Renaming a first Script Element as a rename on slate's doc - for testing purposes. 
     const onRenameButtonClick = () => {
         Transforms.setNodes(editor, {
             label: "TEST"
@@ -143,11 +213,15 @@ export const ScriptEditor: React.FC<Props> = () => {
             });
     };
 
+
+    //Editor component
     return (
         <div>
             <Slate editor={editor} initialValue={value as Descendant[]} onChange={newValue => {
                 setValue(newValue);
                 const slateScript = newValue as SlateScript;
+                console.debug("Slate JS: ");
+                console.debug(slateScript);
                 console.debug("Octopus script's new value:");
                 console.debug(OctopusScriptMapper.mapSlateScriptToOctopusScript(slateScript));
             }}>
