@@ -65,13 +65,37 @@ interface Props { }
 //SIMPLE Emitter to emit and listen to YJS Updates within the window ...
 const mit = mitt();
 
+//NOTE: This function calculates whether a plus button should be shown under cursor ... it can be called after every keystroke
+function shouldPlusButtonShow(editor, selection) {
+    // Get start and end, modify it as we move along.
+    let [start, end] = Range.edges(selection);
+
+    // Move forward along until I hit a different tree depth
+    const after = Editor.after(editor, end, {
+        unit: 'character',
+    });
+
+    const charAfter = after && Editor.string(editor, { anchor: end, focus: after });
+    const afterIsOK = (!after || (after && charAfter && charAfter.length && charAfter == '\n'));
+
+    // Move backwards
+    const before = Editor.before(editor, start, {
+        unit: 'character',
+    });
+
+    const charBefore = before && Editor.string(editor, { anchor: before, focus: start });
+    const beforeIsOk = (!before || before && charBefore && charBefore.length && charBefore[0] == '\n');
+
+    return beforeIsOk && afterIsOK;
+}
+
 export const ScriptEditor: React.FC<Props> = () => {
 
     // Create a yjs document and get the shared type
     const sharedType = useMemo(() => {
         const yDoc = new Y.Doc();
-        const sharedType = yDoc.get("content", Y.XmlText) as Y.XmlText;        
-        
+        const sharedType = yDoc.get("content", Y.XmlText) as Y.XmlText;
+
         //NOTE: Initialze the doc from the same source and so, upcoming changes will have a shared starting tracking point.. otherwise the initial merge can be a mess and also applyUpdate(event) will not work ...
         const update = Y.encodeStateAsUpdate(initialYDoc);
         Y.applyUpdate(sharedType.doc, update);
@@ -134,7 +158,7 @@ export const ScriptEditor: React.FC<Props> = () => {
                 console.log("Caught incoming event from client ID " + clientId.toString() + " with following update event: ", updateEvent, "Update will now be applied");
                 Y.applyUpdate(sharedType.doc, updateEvent);
             }
-            else console.log ("Ignoring my own event");
+            else console.log("Ignoring my own event");
         });
 
         return mit
@@ -146,7 +170,7 @@ export const ScriptEditor: React.FC<Props> = () => {
         YjsEditor.connect(editor);
         return () => YjsEditor.disconnect(editor);
     }, [editor]);
-    
+
 
     //Element renderer callbacks
     const renderElement = useCallback(({ attributes, children, element }) => {
@@ -170,6 +194,8 @@ export const ScriptEditor: React.FC<Props> = () => {
 
     //Keys listener. Mainly stops <Enter> from creating a new paragraph resulting in Legacy Octopus behavior. Also listens for hotkeys.
     const slateKeyDownEvent = (event: React.KeyboardEvent) => {
+        const wordUnderCursor = shouldPlusButtonShow(editor, editor.selection);
+        console.log("Should I show Plus button at the cursor ??", wordUnderCursor);
         for (const hotkey in HOTKEYS) {
             if (isHotkey(hotkey, event as any)) {
                 event.preventDefault()
@@ -186,6 +212,7 @@ export const ScriptEditor: React.FC<Props> = () => {
         if (location != null) {
             if (JSON.stringify(location.anchor.path) == JSON.stringify(location.focus.path) && location.anchor.offset == location.focus.offset) {
                 console.log("Key pressed at cursor:" + event.key + JSON.stringify(location.anchor.path) + ", offset:" + location.anchor.offset);
+                Range.edges(location)
             }
             else {
                 console.log("Key pressed on selection:" + event.key + "FROM: " + JSON.stringify(location.anchor.path) + ", offset: " + location.anchor.offset + " TO: " + JSON.stringify(location.focus.path) + ", offset: " + location.focus.offset);
