@@ -12,8 +12,9 @@ import { CustomElement, CustomText, SlateScript } from "./types/SlateScript";
 import * as ScriptRenderers from "./ScriptRenderers";
 import * as OctopusScriptMapper from "./mappers/OctopusScriptMapper";
 import * as SlateScriptMapper from "./mappers/SlateScriptMapper";
-import { withYjs, slateNodesToInsertDelta, YjsEditor, translateYjsEvent } from 'slate-yjs-mkr/core';
+import { withYjs, slateNodesToInsertDelta, YjsEditor, translateYjsEvent} from 'slate-yjs-mkr/core';
 import mitt, { Emitter, EventType } from "mitt";
+import * as awarenessProtocol from 'y-protocols/awareness.js'
 
 declare module 'slate' {
     interface CustomTypes {
@@ -65,9 +66,27 @@ interface Props { }
 //SIMPLE Emitter to emit and listen to YJS Updates within the window ...
 const mit = mitt();
 
+function togglePlusButton(show: boolean, plusRef){
+    const plusElem = plusRef;
+
+    if (show){
+        const selObj = window.getSelection();
+        const selRange = selObj.getRangeAt(0); 
+        const boundingRect = selRange.getBoundingClientRect();
+        plusElem.style.left = plusElem.parentElement.offsetLeft + "px";
+        plusElem.style.top = boundingRect.top + boundingRect.height + "px";
+        plusElem.style.display = "block";    
+    }
+    else plusElem.style.display = "none";    
+}
+
 //NOTE: This function calculates whether a plus button should be shown under cursor ... it can be called after every keystroke
 function shouldPlusButtonShow(editor, selection) {
     // Get start and end, modify it as we move along.
+    if (!selection) 
+        return false;
+
+
     let [start, end] = Range.edges(selection);
 
     // Move forward along until I hit a different tree depth
@@ -91,9 +110,32 @@ function shouldPlusButtonShow(editor, selection) {
 
 export const ScriptEditor: React.FC<Props> = () => {
 
+    const plusRef = React.useRef();
+
+    const yDoc = useMemo(()=>{
+        const yDoc = new Y.Doc();
+        return yDoc;
+    },[]);
+
+    /*
+    const awareness = useMemo(()=>{
+        const awareDoc = new awarenessProtocol.Awareness(yDoc);
+        awareDoc.on('update', (clients, transactionOrigin) => {
+            console.log ("AWARENESS UPDATE clients / transactionOrigin ", clients, transactionOrigin);       
+            console.log(awareDoc.getStates());
+        });
+
+        awareDoc.on('change', (clients, transactionOrigin) => {
+            console.log ("AWARENESS CHANGE clients / transactionOrigin ", clients, transactionOrigin);            
+        });
+
+        return awareDoc;
+
+    },[]);
+    */
+
     // Create a yjs document and get the shared type
     const sharedType = useMemo(() => {
-        const yDoc = new Y.Doc();
         const sharedType = yDoc.get("content", Y.XmlText) as Y.XmlText;
 
         //NOTE: Initialze the doc from the same source and so, upcoming changes will have a shared starting tracking point.. otherwise the initial merge can be a mess and also applyUpdate(event) will not work ...
@@ -108,6 +150,14 @@ export const ScriptEditor: React.FC<Props> = () => {
         */
         sharedType.observeDeep((event, transaction) => {
             console.log("OBSERVING Document change - EVENT/TRANSACTION:", event, transaction);
+            const e = event[0] as Y.YEvent<any>;
+            console.log ("PATH", e.path);
+            console.log ("TRANSACTIOn", e.transaction);
+            console.log ("KEYS", e.keys);
+            console.log ("CURRENT TARGET", e.currentTarget);            
+            console.log ("TARGET", e.target);
+            console.log ("DELTA", e.changes.delta);
+
             if (!transaction.local) {
                 //NOTE: ATTEMPT TO READ OPS HERE - i.e. when transaction is REMOTE (see below) ENDS UP IN NOT MERGING A DOC PROPERLY ... 
                 console.log("REMOTE TRANSACTION OBSERVED")
@@ -126,6 +176,8 @@ export const ScriptEditor: React.FC<Props> = () => {
 
         return sharedType
     }, []);
+    
+
 
     //NOTE: Editor initialization
     const [editor, setEditor] = useState(() => {
@@ -194,8 +246,7 @@ export const ScriptEditor: React.FC<Props> = () => {
 
     //Keys listener. Mainly stops <Enter> from creating a new paragraph resulting in Legacy Octopus behavior. Also listens for hotkeys.
     const slateKeyDownEvent = (event: React.KeyboardEvent) => {
-        const wordUnderCursor = shouldPlusButtonShow(editor, editor.selection);
-        console.log("Should I show Plus button at the cursor ??", wordUnderCursor);
+
         for (const hotkey in HOTKEYS) {
             if (isHotkey(hotkey, event as any)) {
                 event.preventDefault()
@@ -218,6 +269,13 @@ export const ScriptEditor: React.FC<Props> = () => {
                 console.log("Key pressed on selection:" + event.key + "FROM: " + JSON.stringify(location.anchor.path) + ", offset: " + location.anchor.offset + " TO: " + JSON.stringify(location.focus.path) + ", offset: " + location.focus.offset);
             }
         }
+    };
+    
+    //Keys listener. Shows plus button in position
+    const slateKeyUpEvent = (event: React.KeyboardEvent) => {
+        const wordUnderCursor = shouldPlusButtonShow(editor, editor.selection);
+        console.log("Should I show Plus button at the cursor ??", wordUnderCursor);
+        togglePlusButton(wordUnderCursor, plusRef.current);
     };
 
     //Adding a new Sript Element into slate's doc - for testing purposes.
@@ -244,6 +302,7 @@ export const ScriptEditor: React.FC<Props> = () => {
     //Editor component
     return (
         <div>
+            <div ref={plusRef} style={{display:"none", position: "absolute", left:"0", top:"0", width: "25px", height: "25px", backgroundColor:"green"}}>+</div>
             <Slate editor={editor} initialValue={value as Descendant[]} onChange={newValue => {
                 setValue(newValue);
                 const slateScript = newValue as SlateScript;
@@ -259,6 +318,7 @@ export const ScriptEditor: React.FC<Props> = () => {
                     spellCheck
                     autoFocus
                     onKeyDown={slateKeyDownEvent}
+                    onKeyUp={slateKeyUpEvent}
                 />
             </Slate>
             <button onClick={onNewElementButtonClick}>
