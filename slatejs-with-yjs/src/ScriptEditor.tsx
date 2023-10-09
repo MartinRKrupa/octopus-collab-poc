@@ -12,9 +12,13 @@ import { CustomElement, CustomText, SlateScript } from "./types/SlateScript";
 import * as ScriptRenderers from "./ScriptRenderers";
 import * as OctopusScriptMapper from "./mappers/OctopusScriptMapper";
 import * as SlateScriptMapper from "./mappers/SlateScriptMapper";
-import { withYjs, slateNodesToInsertDelta, YjsEditor, translateYjsEvent} from 'slate-yjs-mkr/core';
+import { withYjs, slateNodesToInsertDelta, YjsEditor, translateYjsEvent } from 'slate-yjs-mkr/core';
 import mitt, { Emitter, EventType } from "mitt";
 import * as awarenessProtocol from 'y-protocols/awareness.js'
+import { ASClient } from "./utils/activeSync";
+import { Transaction } from "yjs";
+import { arrayToUint8Array, uint8ArrayToArray } from "./utils/Uint8ArrayUtils";
+
 
 declare module 'slate' {
     interface CustomTypes {
@@ -66,24 +70,27 @@ interface Props { }
 //SIMPLE Emitter to emit and listen to YJS Updates within the window ...
 const mit = mitt();
 
-function togglePlusButton(show: boolean, plusRef){
+//NOTE: This story ID MUST EXIST in the backend, otherwise the solution does not work ...
+const storyId = 3107327319;
+
+function togglePlusButton(show: boolean, plusRef) {
     const plusElem = plusRef;
 
-    if (show){
+    if (show) {
         const selObj = window.getSelection();
-        const selRange = selObj.getRangeAt(0); 
+        const selRange = selObj.getRangeAt(0);
         const boundingRect = selRange.getBoundingClientRect();
         plusElem.style.left = plusElem.parentElement.offsetLeft + "px";
         plusElem.style.top = boundingRect.top + boundingRect.height + "px";
-        plusElem.style.display = "block";    
+        plusElem.style.display = "block";
     }
-    else plusElem.style.display = "none";    
+    else plusElem.style.display = "none";
 }
 
 //NOTE: This function calculates whether a plus button should be shown under cursor ... it can be called after every keystroke
 function shouldPlusButtonShow(editor, selection) {
     // Get start and end, modify it as we move along.
-    if (!selection) 
+    if (!selection)
         return false;
 
 
@@ -111,11 +118,16 @@ function shouldPlusButtonShow(editor, selection) {
 export const ScriptEditor: React.FC<Props> = () => {
 
     const plusRef = React.useRef();
-
-    const yDoc = useMemo(()=>{
+    const labelRef = React.useRef();
+    
+    const yDoc = useMemo(() => {
         const yDoc = new Y.Doc();
         return yDoc;
-    },[]);
+    }, []);
+
+    let firstUpdate = useMemo(() => true, []);
+    let applyingRemoteChange = useMemo(() => false, []);
+
 
     /*
     const awareness = useMemo(()=>{
@@ -137,11 +149,10 @@ export const ScriptEditor: React.FC<Props> = () => {
     // Create a yjs document and get the shared type
     const sharedType = useMemo(() => {
         const sharedType = yDoc.get("content", Y.XmlText) as Y.XmlText;
-
         //NOTE: Initialze the doc from the same source and so, upcoming changes will have a shared starting tracking point.. otherwise the initial merge can be a mess and also applyUpdate(event) will not work ...
-        const update = Y.encodeStateAsUpdate(initialYDoc);
-        Y.applyUpdate(sharedType.doc, update);
-        // Load the initial value into the yjs document
+        //const update = Y.encodeStateAsUpdate(initialYDoc);
+        //Y.applyUpdate(sharedType.doc, update);
+        //Load the initial value into the yjs document
         console.log("SHARED TYPE:" + sharedType.toJSON());
         console.log("Client ID is: " + yDoc.clientID);
 
@@ -150,33 +161,117 @@ export const ScriptEditor: React.FC<Props> = () => {
         */
         sharedType.observeDeep((event, transaction) => {
             console.log("OBSERVING Document change - EVENT/TRANSACTION:", event, transaction);
+            /*
             const e = event[0] as Y.YEvent<any>;
-            console.log ("PATH", e.path);
-            console.log ("TRANSACTIOn", e.transaction);
-            console.log ("KEYS", e.keys);
-            console.log ("CURRENT TARGET", e.currentTarget);            
-            console.log ("TARGET", e.target);
-            console.log ("DELTA", e.changes.delta);
-
+            console.log("PATH", e.path);
+            console.log("TRANSACTIOn", e.transaction);
+            console.log("KEYS", e.keys);
+            console.log("CURRENT TARGET", e.currentTarget);
+            console.log("TARGET", e.target);
+            console.log("DELTA", e.changes.delta);
+            console.log("TRANSACTION T", transaction);
+            */
             if (!transaction.local) {
                 //NOTE: ATTEMPT TO READ OPS HERE - i.e. when transaction is REMOTE (see below) ENDS UP IN NOT MERGING A DOC PROPERLY ... 
                 console.log("REMOTE TRANSACTION OBSERVED")
             }
             else {
-                let ops = translateYjsEvent(sharedType, editor, event[0]);
+                //NOTE - this is a stolen method from slate-yjs, probably not want to use it to read the transactions ...
+                //let ops = translateYjsEvent(sharedType, editor, event[0]);
                 console.log("LOCAL TRANSACTION OBSERVED");
-                console.log("OPERATIONS extracted from the document observation in client :" + yDoc.clientID, ops);
+                //console.log("OPERATIONS extracted from the document observation in client :" + yDoc.clientID, ops);
             }
         });
 
+        yDoc.on("update", (update: Uint8Array, origin: any, doc: Y.Doc, tr: Transaction) => {
+            console.log("UPDATE EVENT, following are the update / origin / transaction", update, doc, tr);
+            if (tr.local) {
+                const changeReqBody = { "change": uint8ArrayToArray(update) };
 
-        yDoc.on("update", (updateEvent) => {
-            emitter.emit(yDoc.clientID.toString(), updateEvent);
+                asClient.runApiHTTPRequest("POST", "Story/" + storyId + "/applyYjsChange", JSON.stringify(changeReqBody), (response) => {
+                    console.log("Apply Change response is " + response);
+                });
+            }
+            else {
+                console.log("REMOTE transaction - will not be re-sent to AS")
+            }
         });
-
-        return sharedType
+        /*
+        yDoc.on("update", (updateEvent) => {
+            //NOTE OFF, to suport ActiveSync.
+        });
+        */
+        return sharedType;
     }, []);
-    
+
+    const asClient = useMemo(() => {
+        const client = new ASClient();
+        console.log("PARSING PARAMS", JSON.parse("{\"params\":{\"entityId\":" + storyId + ",\"entityType\":\"STORY\"}}"));
+
+        const handleASMessage = (asMessage) => {
+            console.log("Retrieving AS Message by client " + client.getClientId());
+
+            if (asMessage && asMessage.type && ((asMessage.rows && asMessage.rows[0] && asMessage.rows[0].props) || (asMessage.row && asMessage.row.props))) {
+
+                const asRow = asMessage.rows ? asMessage.rows[0].props : asMessage.row.props;
+                console.log("Retrieved AsRow is:", asRow);
+
+                //AS Messages handling
+                if (asMessage.type == "ASInitMsg") {
+                    const labelElem : HTMLDivElement = labelRef.current;
+                    labelElem.innerHTML = "<strong>Slate ClientID:</strong>" + sharedType.doc.clientID + ", <strong>AS client ID:</strong>" + client.getClientId();
+
+                    if (!asRow.state) {
+                        console.log("Initial state not found, initializing from dummy data ");
+                        let requestBody = { "state": uint8ArrayToArray(Y.encodeStateAsUpdate(initialSharedDoc.doc)) };
+
+                        client.runApiHTTPRequest("POST", "Story/" + storyId + "/setYjsState", JSON.stringify(requestBody), (response) => {
+                            console.log("Set State response is " + response);
+                        });
+                    }
+                    else {
+                        if (sharedType.toJSON() == "") {
+                            console.log("Inital state found. Initializing doc from the remote");
+                            const update = arrayToUint8Array(asRow.state);
+
+                            Y.applyUpdate(sharedType.doc, update);
+
+                        }
+                        else {
+                            console.log("Document already initialized, skipping state initialization from remote");
+                        }
+                    }
+                }
+                if (asMessage.type == "ASUpdateMsg" && asRow.change) {
+                    const update = arrayToUint8Array(asRow.change);
+                    const decodedUpdate = Y.decodeUpdate(update);
+                    console.log("Encoded Change Retrieved by client " + client.getClientId() + ". It will now be applied to doc " + sharedType.doc.clientID);
+                    console.log("Decoded update",decodedUpdate);
+                    decodedUpdate.structs.forEach( (struct) =>{
+                        if(struct.id.client != sharedType.doc.clientID) {
+                            console.log ("One of the updates was perfromed by remote client "+struct.id.client+".I am " + sharedType.doc.clientID + " Applying")
+                            Y.applyUpdate(sharedType.doc, update);
+                            return;
+                        }
+                    })
+                }
+            }
+        }
+
+        return client.start("test", "octopus", "Collab", "{\"params\":{\"entityId\":" + storyId + ",\"entityType\":\"STORY\"}}", handleASMessage);
+
+    }, []);
+
+    useEffect(() => {
+        const handleUnload = () => {
+            asClient.disconnect(null);
+            // Perform actions before the component unloads
+        };
+        window.addEventListener('unload', handleUnload);
+        return () => {
+            window.removeEventListener('unload', handleUnload);
+        };
+    }, []);
 
 
     //NOTE: Editor initialization
@@ -202,6 +297,8 @@ export const ScriptEditor: React.FC<Props> = () => {
     const [value, setValue] = useState<Node[]>([]);
 
     //NOTE: Listening to "remote" (i.e other editors') changes emmited as YJS Updates and applying them as YJS Updates
+    /*NOTE: TURNED OFF TO SUPPORT ACTIVESync
+    
     const emitter: Emitter<Record<EventType, unknown>> = useMemo(() => {
         console.log("Initiating Emitter for " + sharedType.doc.clientID);
         mit.on("*", (clientId, updateEvent: Uint8Array) => {
@@ -212,10 +309,10 @@ export const ScriptEditor: React.FC<Props> = () => {
             }
             else console.log("Ignoring my own event");
         });
-
+    
         return mit
     }, []
-    );
+    );*/
 
     //Link YJS to SlateJS
     useEffect(() => {
@@ -270,7 +367,7 @@ export const ScriptEditor: React.FC<Props> = () => {
             }
         }
     };
-    
+
     //Keys listener. Shows plus button in position
     const slateKeyUpEvent = (event: React.KeyboardEvent) => {
         const wordUnderCursor = shouldPlusButtonShow(editor, editor.selection);
@@ -283,7 +380,7 @@ export const ScriptEditor: React.FC<Props> = () => {
         const op: InsertNodeOperation = {
             type: 'insert_node',
             path: [0],
-            node: getSlateTestStudioElement()
+            node: getSlateTestStudioElement(editor.children.length)
         };
         editor.apply(op);
     };
@@ -302,7 +399,8 @@ export const ScriptEditor: React.FC<Props> = () => {
     //Editor component
     return (
         <div>
-            <div ref={plusRef} style={{display:"none", position: "absolute", left:"0", top:"0", width: "25px", height: "25px", backgroundColor:"green"}}>+</div>
+            <div ref={plusRef} style={{ display: "none", position: "absolute", left: "0", top: "0", width: "25px", height: "25px", backgroundColor: "green" }}>+</div>
+            <div ref={labelRef}>...label goes here</div>
             <Slate editor={editor} initialValue={value as Descendant[]} onChange={newValue => {
                 setValue(newValue);
                 const slateScript = newValue as SlateScript;

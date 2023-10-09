@@ -36,37 +36,35 @@ const dummyScript: OctopusScript = {
     }]
 };
 
-const newSlateStudioNode:CustomElement = {
-    type: 'STUDIO',
-    label: 'ŠTÚDIO 2',
-    elid: null,
-    children: [{
-        type: 'text',
-        text: 'A NEW STUDIO with',
-        pid: null,
-        children: null
-    } as SlateTextParagraph,
-    {
-        type: 'tag',
-        text: "MYTAG",
-        foreground: "#FF0000",
-        background: "#000000",
-        pid: null,
-        children: null        
-    } as SlateTagParagraph,
-    {
-        type: 'text',
-        text: 'a bold text',
-        bold: true,
-        pid: null,
-        children: null
-    } as SlateTextParagraph],
-}
-
 export function getTestScript(): OctopusScript {    
     return dummyScript;
 }
 
-export function getSlateTestStudioElement(): CustomElement {    
-    return newSlateStudioNode;
+export function getSlateTestStudioElement(elid): CustomElement {    
+    return {
+        type: 'STUDIO',
+        label: 'ŠTÚDIO 2',
+        elid: elid,
+        children: [{
+            type: 'text',
+            text: 'A NEW STUDIO with',
+            pid: "1",
+            children: null
+        } as SlateTextParagraph,
+        {
+            type: 'tag',
+            text: "MYTAG",
+            foreground: "#FF0000",
+            background: "#000000",
+            pid: "1",
+            children: null        
+        } as SlateTagParagraph,
+        {
+            type: 'text',
+            text: 'a bold text',
+            bold: true,
+            pid: "2",
+            children: null
+        } as SlateTextParagraph],
+    }
 }
