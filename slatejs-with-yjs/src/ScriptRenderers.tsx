@@ -27,11 +27,24 @@ export function renderStudio(studio: SlateStudioElement, children):ReactElement{
  * @returns - rendered Tag Element as HTML
  */
 
-export function renderTag(tag: SlateTagParagraph): ReactElement {
+export function renderTag(tag: SlateTagParagraph, children, attributes): ReactElement {
     return (
-        <div style={{ display: "inline-block", userSelect: "none", background: tag.background, color: tag.foreground }}>{tag.text}</div>
+      /** TOTO JE TROCHU PROBLEM. Ten kurzor tam furt lezie, jak je to inline element ... je potreba to osetrit rucne .. :( */
+        <div {...attributes} contentEditable={false} style={{ cursor:"not-allowed", display: "inline-block", background: tag.background, color: tag.foreground }}>{children}</div>
     )
 }
+
+export function renderNote(tag: SlateTagParagraph, children, attributes): ReactElement {
+  return (
+    <div style={{padding:"5px"}}>
+      <div contentEditable={false} style={{height:"20px", backgroundColor:"#CCCCCC" }}>NOTE</div>
+      <div contentEditable={false} style={{backgroundColor:"#CCCCCC" }}><span className="slate-ignored" contentEditable={true}>THIS IS EDITABLE BUT NOT INTO SLATE</span></div>
+
+      <span {...attributes} style={{ display: "block", backgroundColor: "#DDDDDD", color: "black" }}>{children}</span>
+    </div>
+  )
+}
+
 
 /**
  * Renders Text - a content of an element 

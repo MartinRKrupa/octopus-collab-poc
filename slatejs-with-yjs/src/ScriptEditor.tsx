@@ -2,7 +2,7 @@ import * as React from "react";
 import * as Y from 'yjs';
 
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { BaseEditor, Editor, createEditor, InsertNodeOperation, Node, NodeOperation, Operation, TextOperation, Transforms, Range, Descendant } from "slate";
+import { BaseEditor, Editor, createEditor, InsertNodeOperation, Node, NodeOperation, Operation, TextOperation, Transforms, Range, Descendant, Path } from "slate";
 import { isHotkey } from 'is-hotkey';
 import { Editable, ReactEditor, Slate, withReact } from "slate-react";
 import "./styles.css";
@@ -18,6 +18,7 @@ import * as awarenessProtocol from 'y-protocols/awareness.js'
 import { ASClient } from "./utils/activeSync";
 import { Transaction } from "yjs";
 import { arrayToUint8Array, uint8ArrayToArray } from "./utils/Uint8ArrayUtils";
+import { shouldPlusButtonShow, togglePlusButton } from "./plusButtonHandler"
 
 
 declare module 'slate' {
@@ -73,63 +74,17 @@ const mit = mitt();
 //NOTE: This story ID MUST EXIST in the backend, otherwise the solution does not work ...
 const storyId = 3107327319;
 
-function togglePlusButton(show: boolean, plusRef) {
-    const plusElem = plusRef;
-
-    if (show) {
-        const selObj = window.getSelection();
-        const selRange = selObj.getRangeAt(0);
-        const boundingRect = selRange.getBoundingClientRect();
-        plusElem.style.left = plusElem.parentElement.offsetLeft + "px";
-        plusElem.style.top = boundingRect.top + boundingRect.height + "px";
-        plusElem.style.display = "block";
-    }
-    else plusElem.style.display = "none";
-}
-
-//NOTE: This function calculates whether a plus button should be shown under cursor ... it can be called after every keystroke
-function shouldPlusButtonShow(editor, selection) {
-    // Get start and end, modify it as we move along.
-    if (!selection)
-        return false;
-
-
-    let [start, end] = Range.edges(selection);
-
-    // Move forward along until I hit a different tree depth
-    const after = Editor.after(editor, end, {
-        unit: 'character',
-    });
-
-    const charAfter = after && Editor.string(editor, { anchor: end, focus: after });
-    const afterIsOK = (!after || (after && charAfter && charAfter.length && charAfter == '\n'));
-
-    // Move backwards
-    const before = Editor.before(editor, start, {
-        unit: 'character',
-    });
-
-    const charBefore = before && Editor.string(editor, { anchor: before, focus: start });
-    const beforeIsOk = (!before || before && charBefore && charBefore.length && charBefore[0] == '\n');
-
-    return beforeIsOk && afterIsOK;
-}
-
 export const ScriptEditor: React.FC<Props> = () => {
 
     const plusRef = React.useRef();
     const labelRef = React.useRef();
-    
+
     const yDoc = useMemo(() => {
         const yDoc = new Y.Doc();
         return yDoc;
     }, []);
 
-    let firstUpdate = useMemo(() => true, []);
-    let applyingRemoteChange = useMemo(() => false, []);
-
-
-    /*
+    /* TBD: AWARENESS
     const awareness = useMemo(()=>{
         const awareDoc = new awarenessProtocol.Awareness(yDoc);
         awareDoc.on('update', (clients, transactionOrigin) => {
@@ -150,6 +105,7 @@ export const ScriptEditor: React.FC<Props> = () => {
     const sharedType = useMemo(() => {
         const sharedType = yDoc.get("content", Y.XmlText) as Y.XmlText;
         //NOTE: Initialze the doc from the same source and so, upcoming changes will have a shared starting tracking point.. otherwise the initial merge can be a mess and also applyUpdate(event) will not work ...
+        //With ACTIVESYNC - this is disabled. the shared state is retrieved by all clients in ASInitMessage - see below
         //const update = Y.encodeStateAsUpdate(initialYDoc);
         //Y.applyUpdate(sharedType.doc, update);
         //Load the initial value into the yjs document
@@ -161,33 +117,40 @@ export const ScriptEditor: React.FC<Props> = () => {
         */
         sharedType.observeDeep((event, transaction) => {
             console.log("OBSERVING Document change - EVENT/TRANSACTION:", event, transaction);
-            /*
+
             const e = event[0] as Y.YEvent<any>;
+            const target = e.target as Y.XmlText;
             console.log("PATH", e.path);
             console.log("TRANSACTIOn", e.transaction);
             console.log("KEYS", e.keys);
             console.log("CURRENT TARGET", e.currentTarget);
-            console.log("TARGET", e.target);
+            console.log("TARGET", target);
+            console.log("TARGET DOM", target.toDOM());
+            console.log("CHANGES", e.changes);
             console.log("DELTA", e.changes.delta);
             console.log("TRANSACTION T", transaction);
-            */
+
             if (!transaction.local) {
                 //NOTE: ATTEMPT TO READ OPS HERE - i.e. when transaction is REMOTE (see below) ENDS UP IN NOT MERGING A DOC PROPERLY ... 
-                console.log("REMOTE TRANSACTION OBSERVED")
+                console.log("REMOTE TRANSACTION OBSERVED");
+                //const targetElement = Node.get(editor, e.path as Path);
+                //console.log(translateYTextEvent(sharedType, sharedOctopusScript, e as Y.YTextEvent, e.path as number[]));
+
             }
             else {
                 //NOTE - this is a stolen method from slate-yjs, probably not want to use it to read the transactions ...
-                //let ops = translateYjsEvent(sharedType, editor, event[0]);
+                let ops = translateYjsEvent(sharedType, editor, event[0]);
                 console.log("LOCAL TRANSACTION OBSERVED");
-                //console.log("OPERATIONS extracted from the document observation in client :" + yDoc.clientID, ops);
+                console.log("OPERATIONS extracted from the document observation in client :" + yDoc.clientID, ops);
             }
         });
 
         yDoc.on("update", (update: Uint8Array, origin: any, doc: Y.Doc, tr: Transaction) => {
-            console.log("UPDATE EVENT, following are the update / origin / transaction", update, doc, tr);
+            console.log("UPDATE EVENT, following are the update / origin / doc / transaction", update, origin, doc, tr);
+            console.log("DECODED INCOMING CHANGE", Y.decodeUpdate(update));
+
             if (tr.local) {
                 const changeReqBody = { "change": uint8ArrayToArray(update) };
-
                 asClient.runApiHTTPRequest("POST", "Story/" + storyId + "/applyYjsChange", JSON.stringify(changeReqBody), (response) => {
                     console.log("Apply Change response is " + response);
                 });
@@ -218,8 +181,8 @@ export const ScriptEditor: React.FC<Props> = () => {
 
                 //AS Messages handling
                 if (asMessage.type == "ASInitMsg") {
-                    const labelElem : HTMLDivElement = labelRef.current;
-                    labelElem.innerHTML = "<strong>Slate ClientID:</strong>" + sharedType.doc.clientID + ", <strong>AS client ID:</strong>" + client.getClientId();
+                    const labelElem: HTMLDivElement = labelRef.current;
+                    labelElem.innerHTML = "<strong>YJS ClientID:</strong>" + sharedType.doc.clientID + ", <strong>AS client ID:</strong>" + client.getClientId();
 
                     if (!asRow.state) {
                         console.log("Initial state not found, initializing from dummy data ");
@@ -246,14 +209,29 @@ export const ScriptEditor: React.FC<Props> = () => {
                     const update = arrayToUint8Array(asRow.change);
                     const decodedUpdate = Y.decodeUpdate(update);
                     console.log("Encoded Change Retrieved by client " + client.getClientId() + ". It will now be applied to doc " + sharedType.doc.clientID);
-                    console.log("Decoded update",decodedUpdate);
-                    decodedUpdate.structs.forEach( (struct) =>{
-                        if(struct.id.client != sharedType.doc.clientID) {
-                            console.log ("One of the updates was perfromed by remote client "+struct.id.client+".I am " + sharedType.doc.clientID + " Applying")
-                            Y.applyUpdate(sharedType.doc, update);
-                            return;
+                    console.log("Decoded update", decodedUpdate);
+                    let remoteChangeFound = false;
+
+                    //NOTE:Search in added structs
+                    decodedUpdate.structs.forEach((struct, idx) => {
+                        if (struct.id.client != sharedType.doc.clientID) {
+                            console.log("One of the updates [" + idx + "] was perfromed by remote client " + struct.id.client + ".I am " + sharedType.doc.clientID + " Applying")
+                            if (remoteChangeFound == false) remoteChangeFound = true;
                         }
-                    })
+                    });
+
+                    //NOTE: Also search in DeleteSet 
+                    decodedUpdate.ds.clients.forEach((value, key) => {
+                        if (key != sharedType.doc.clientID) {
+                            console.log("One of the dss [" + key + "] was perfromed by remote client " + key + ".I am " + sharedType.doc.clientID + " Applying")
+                            if (remoteChangeFound == false) remoteChangeFound = true;
+                        }
+                    });
+                    console.log("remoteChangeFound", remoteChangeFound)
+                    if (remoteChangeFound) {
+                        console.log("Change will now apply");
+                        Y.applyUpdate(sharedType.doc, update);
+                    }
                 }
             }
         }
@@ -335,14 +313,50 @@ export const ScriptEditor: React.FC<Props> = () => {
     const renderParagraph = useCallback(({ attributes, children, leaf }) => {
         switch (leaf.type) {
             case 'tag':
-                return ScriptRenderers.renderTag(leaf);
+                return ScriptRenderers.renderTag(leaf, children, attributes);
             case 'text':
                 return ScriptRenderers.renderText(leaf, children, attributes);
+            case 'note':
+                return ScriptRenderers.renderNote(leaf, children, attributes);
         }
     }, []);
 
     //Keys listener. Mainly stops <Enter> from creating a new paragraph resulting in Legacy Octopus behavior. Also listens for hotkeys.
     const slateKeyDownEvent = (event: React.KeyboardEvent) => {
+
+        let htmlSelection = window.getSelection();
+        let selectedText = htmlSelection.anchorNode;
+        let selectedTextOffset = htmlSelection.anchorOffset;        
+        let selectedNode = selectedText.parentElement;
+
+        //NOTE: This allows input into special editable HTML nodes without slate noticing ... can be useful ...  
+        if(selectedNode.classList.contains("slate-ignored")){
+            console.log("THIS INPUT SHOULD BE COMPLETELY IGNORED BY SLATE");
+            const fromText = selectedText.textContent.substring(0, selectedTextOffset);
+            const toText = selectedText.textContent.substring(selectedTextOffset, selectedText.textContent.length);
+            if(event.key.length == 1){
+                selectedText.textContent = fromText + event.key + toText;
+                htmlSelection.setPosition(selectedText, selectedTextOffset + 1);
+            } 
+            if(event.key == "Enter"){
+                selectedText.textContent = fromText + "\n" + toText;
+                htmlSelection.setPosition(selectedText, selectedTextOffset + 1);
+            } 
+
+            if(event.key == "Delete"){
+                selectedText.textContent = fromText + toText.substring(1);
+                htmlSelection.setPosition(selectedText, selectedTextOffset);
+            } 
+            
+            if(event.key == "Backspace"){
+                selectedText.textContent = fromText.substring(0,fromText.length-1) + toText;
+                htmlSelection.setPosition(selectedText, selectedTextOffset - 1);
+            } 
+
+            event.preventDefault();    
+
+        }
+
 
         for (const hotkey in HOTKEYS) {
             if (isHotkey(hotkey, event as any)) {
@@ -352,6 +366,8 @@ export const ScriptEditor: React.FC<Props> = () => {
                 toggleMark(editor, mark)
             }
         }
+        
+
         if (event.keyCode === 13) {
             editor.insertText('\n');
             event.preventDefault();

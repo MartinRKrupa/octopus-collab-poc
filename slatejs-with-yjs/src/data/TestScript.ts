@@ -60,6 +60,12 @@ export function getSlateTestStudioElement(elid): CustomElement {
             children: null        
         } as SlateTagParagraph,
         {
+            type: 'note',
+            text: "This is a technical note jako prase",
+            pid: "1",
+            children: null        
+        } as SlateTagParagraph,
+        {
             type: 'text',
             text: 'a bold text',
             bold: true,
