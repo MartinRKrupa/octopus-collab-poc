@@ -149,9 +149,9 @@ export const ScriptEditor: React.FC<Props> = () => {
             }
             else {
                 //NOTE - this is a stolen method from slate-yjs, probably not want to use it to read the transactions ...
-                let ops = translateYjsEvent(sharedType, editor, event[0]);
+                //let ops = translateYjsEvent(sharedType, editor, event[0]);
                 console.log("LOCAL TRANSACTION OBSERVED");
-                console.log("OPERATIONS extracted from the document observation in client :" + yDoc.clientID, ops);
+                //console.log("OPERATIONS extracted from the document observation in client :" + yDoc.clientID, ops);
             }
         });
 
@@ -337,35 +337,35 @@ export const ScriptEditor: React.FC<Props> = () => {
 
         let htmlSelection = window.getSelection();
         let selectedText = htmlSelection.anchorNode;
-        let selectedTextOffset = htmlSelection.anchorOffset;
-        let selectedNode = selectedText.parentElement;
+        if (selectedText) {
+            let selectedTextOffset = htmlSelection.anchorOffset;
+            let selectedNode = selectedText.parentElement;
 
-        //NOTE: This allows input into special editable HTML nodes without slate noticing ... can be useful ...  
-        if (selectedNode.classList.contains("slate-ignored")) {
-            console.log("THIS INPUT SHOULD BE COMPLETELY IGNORED BY SLATE");
-            const fromText = selectedText.textContent.substring(0, selectedTextOffset);
-            const toText = selectedText.textContent.substring(selectedTextOffset, selectedText.textContent.length);
-            if (event.key.length == 1) {
-                selectedText.textContent = fromText + event.key + toText;
-                htmlSelection.setPosition(selectedText, selectedTextOffset + 1);
+            //NOTE: This allows input into special editable HTML nodes without slate noticing ... can be useful ...  
+            if (selectedNode.classList.contains("slate-ignored")) {
+                console.log("THIS INPUT SHOULD BE COMPLETELY IGNORED BY SLATE");
+                const fromText = selectedText.textContent.substring(0, selectedTextOffset);
+                const toText = selectedText.textContent.substring(selectedTextOffset, selectedText.textContent.length);
+                if (event.key.length == 1) {
+                    selectedText.textContent = fromText + event.key + toText;
+                    htmlSelection.setPosition(selectedText, selectedTextOffset + 1);
+                }
+                if (event.key == "Enter") {
+                    selectedText.textContent = fromText + "\n" + toText;
+                    htmlSelection.setPosition(selectedText, selectedTextOffset + 1);
+                }
+
+                if (event.key == "Delete") {
+                    selectedText.textContent = fromText + toText.substring(1);
+                    htmlSelection.setPosition(selectedText, selectedTextOffset);
+                }
+
+                if (event.key == "Backspace") {
+                    selectedText.textContent = fromText.substring(0, fromText.length - 1) + toText;
+                    htmlSelection.setPosition(selectedText, selectedTextOffset - 1);
+                }
+                event.preventDefault();
             }
-            if (event.key == "Enter") {
-                selectedText.textContent = fromText + "\n" + toText;
-                htmlSelection.setPosition(selectedText, selectedTextOffset + 1);
-            }
-
-            if (event.key == "Delete") {
-                selectedText.textContent = fromText + toText.substring(1);
-                htmlSelection.setPosition(selectedText, selectedTextOffset);
-            }
-
-            if (event.key == "Backspace") {
-                selectedText.textContent = fromText.substring(0, fromText.length - 1) + toText;
-                htmlSelection.setPosition(selectedText, selectedTextOffset - 1);
-            }
-
-            event.preventDefault();
-
         }
 
 
@@ -423,34 +423,38 @@ export const ScriptEditor: React.FC<Props> = () => {
     };
 
     const addCharacter = () => {
-        
-        const slateNode: SlateTextParagraph[] = [{
-            "pid": "1",
-            "type": "text",
-            "text": "OBYC TEXT ",
-            children: null
-        }]
 
         const yElement: Y.Text = sharedType.toDelta()[0].insert;
-
-        //yElement.setAttribute("elid", 99);
-        //yElement.setAttribute("type", "STUDIO");
-        //yElement.setAttribute("label", "YJS STUDIO");
+        console.log("SharedTypeToDelta", sharedType.toDelta());
         yElement.insert(3, "X");
+    };
 
-        //applyDelta([{insert: "X", attributes: {pid: 1, type: "text"}}, {retain:4}]);
+    const deleteCharacter = () => {
 
-        //sharedType.applyDelta(delta);
-        //debugger;
+        const yElement: Y.Text = sharedType.toDelta()[0].insert;
+        yElement.delete(3,1);
+    };
 
-        //const existingElement = new Y.Text();
-        //const existingDelta = [
-        //    {insert: "AHOJ"}
-        //]
-        //existingElement.applyDelta(existingDelta);
+    const deleteElement = () => {
+        sharedType.delete(0,1);
+    };
+
+    const addStudioElement = () => {
+            
+        const yElement: Y.XmlText = new Y.XmlText();
+        yElement.setAttribute("elid", 99);
+        yElement.setAttribute("type", "STUDIO");
+        yElement.setAttribute("label", "YJS STUDIO");
+        yElement.insert(0,"123", {"pid":1, "type": "text"});
+        sharedType.applyDelta([{insert: yElement}]);
+
+    };
+
+    const formatItalic = () => {
+            
+        const yElement: Y.Text = sharedType.toDelta()[0].insert;
+        yElement.format(0,3,{italic: true});
         
-        //sharedType.delete(0,1);
-
     };
 
     //Editor component
@@ -476,6 +480,7 @@ export const ScriptEditor: React.FC<Props> = () => {
                     onKeyUp={slateKeyUpEvent}
                 />
             </Slate>
+            <div>SlateJS doc manipulation</div>
             <button onClick={onNewElementButtonClick}>
                 Add a new Element
             </button>
@@ -483,10 +488,24 @@ export const ScriptEditor: React.FC<Props> = () => {
             <button onClick={onRenameButtonClick}>
                 Rename first Elem to TEST
             </button>
-
-            <button onClick={addCharacter}>
-                Add X on first position (YJS)
-            </button>
+            <div>
+                <div>Direct YJS doc manipulation</div>
+                <button onClick={addCharacter}>
+                    Add X on 3rd position of the 1st element
+                </button>
+                <button onClick={deleteCharacter}>
+                    Remove a char on 3rd position of the 1st element
+                </button>
+                <button onClick={formatItalic}>
+                    Format first three italic
+                </button>
+                <button onClick={addStudioElement}>
+                    Add Studio Element
+                </button>
+                <button onClick={deleteElement}>
+                    Delete First Element
+                </button>
+            </div>
         </div>
     )
 }
