@@ -8,7 +8,7 @@ import { Editable, ReactEditor, Slate, withReact } from "slate-react";
 import "./styles.css";
 import { OctopusScript } from "./types/OctopusScript";
 import { getTestScript, getSlateTestStudioElement } from "./data/TestScript";
-import { CustomElement, CustomText, SlateScript } from "./types/SlateScript";
+import { CustomElement, CustomText, SlateScript, SlateTextParagraph } from "./types/SlateScript";
 import * as ScriptRenderers from "./ScriptRenderers";
 import * as OctopusScriptMapper from "./mappers/OctopusScriptMapper";
 import * as SlateScriptMapper from "./mappers/SlateScriptMapper";
@@ -59,6 +59,7 @@ let sharedOctopusScript = getTestScript();
 let sharedSlateScript = SlateScriptMapper.mapOctopusScriptToSlateScript(sharedOctopusScript);
 //Slate script to insert Delats for YJS;
 const initialInsertDeltas = slateNodesToInsertDelta(sharedSlateScript);
+console.log("Initial insert deltas are:", initialInsertDeltas);
 
 //YJS CRDT
 const initialYDoc = new Y.Doc()
@@ -120,6 +121,7 @@ export const ScriptEditor: React.FC<Props> = () => {
 
             const e = event[0] as Y.YEvent<any>;
             const target = e.target as Y.XmlText;
+
             console.log("PATH", e.path);
             console.log("TRANSACTIOn", e.transaction);
             console.log("KEYS", e.keys);
@@ -129,6 +131,14 @@ export const ScriptEditor: React.FC<Props> = () => {
             console.log("CHANGES", e.changes);
             console.log("DELTA", e.changes.delta);
             console.log("TRANSACTION T", transaction);
+            console.log("Change details");
+            console.log(e.changes.keys);
+            console.log(e.changes.added);
+            console.log(e.changes.deleted);
+            console.log(e.changes.delta);
+            console.log("XML Doc");
+            console.log(sharedType);
+
 
             if (!transaction.local) {
                 //NOTE: ATTEMPT TO READ OPS HERE - i.e. when transaction is REMOTE (see below) ENDS UP IN NOT MERGING A DOC PROPERLY ... 
@@ -198,6 +208,7 @@ export const ScriptEditor: React.FC<Props> = () => {
                             const update = arrayToUint8Array(asRow.state);
 
                             Y.applyUpdate(sharedType.doc, update);
+                            editor.normalize();
 
                         }
                         else {
@@ -326,34 +337,34 @@ export const ScriptEditor: React.FC<Props> = () => {
 
         let htmlSelection = window.getSelection();
         let selectedText = htmlSelection.anchorNode;
-        let selectedTextOffset = htmlSelection.anchorOffset;        
+        let selectedTextOffset = htmlSelection.anchorOffset;
         let selectedNode = selectedText.parentElement;
 
         //NOTE: This allows input into special editable HTML nodes without slate noticing ... can be useful ...  
-        if(selectedNode.classList.contains("slate-ignored")){
+        if (selectedNode.classList.contains("slate-ignored")) {
             console.log("THIS INPUT SHOULD BE COMPLETELY IGNORED BY SLATE");
             const fromText = selectedText.textContent.substring(0, selectedTextOffset);
             const toText = selectedText.textContent.substring(selectedTextOffset, selectedText.textContent.length);
-            if(event.key.length == 1){
+            if (event.key.length == 1) {
                 selectedText.textContent = fromText + event.key + toText;
                 htmlSelection.setPosition(selectedText, selectedTextOffset + 1);
-            } 
-            if(event.key == "Enter"){
+            }
+            if (event.key == "Enter") {
                 selectedText.textContent = fromText + "\n" + toText;
                 htmlSelection.setPosition(selectedText, selectedTextOffset + 1);
-            } 
+            }
 
-            if(event.key == "Delete"){
+            if (event.key == "Delete") {
                 selectedText.textContent = fromText + toText.substring(1);
                 htmlSelection.setPosition(selectedText, selectedTextOffset);
-            } 
-            
-            if(event.key == "Backspace"){
-                selectedText.textContent = fromText.substring(0,fromText.length-1) + toText;
-                htmlSelection.setPosition(selectedText, selectedTextOffset - 1);
-            } 
+            }
 
-            event.preventDefault();    
+            if (event.key == "Backspace") {
+                selectedText.textContent = fromText.substring(0, fromText.length - 1) + toText;
+                htmlSelection.setPosition(selectedText, selectedTextOffset - 1);
+            }
+
+            event.preventDefault();
 
         }
 
@@ -366,7 +377,7 @@ export const ScriptEditor: React.FC<Props> = () => {
                 toggleMark(editor, mark)
             }
         }
-        
+
 
         if (event.keyCode === 13) {
             editor.insertText('\n');
@@ -411,6 +422,36 @@ export const ScriptEditor: React.FC<Props> = () => {
             });
     };
 
+    const addCharacter = () => {
+        
+        const slateNode: SlateTextParagraph[] = [{
+            "pid": "1",
+            "type": "text",
+            "text": "OBYC TEXT ",
+            children: null
+        }]
+
+        const yElement: Y.Text = sharedType.toDelta()[0].insert;
+
+        //yElement.setAttribute("elid", 99);
+        //yElement.setAttribute("type", "STUDIO");
+        //yElement.setAttribute("label", "YJS STUDIO");
+        yElement.insert(3, "X");
+
+        //applyDelta([{insert: "X", attributes: {pid: 1, type: "text"}}, {retain:4}]);
+
+        //sharedType.applyDelta(delta);
+        //debugger;
+
+        //const existingElement = new Y.Text();
+        //const existingDelta = [
+        //    {insert: "AHOJ"}
+        //]
+        //existingElement.applyDelta(existingDelta);
+        
+        //sharedType.delete(0,1);
+
+    };
 
     //Editor component
     return (
@@ -441,6 +482,10 @@ export const ScriptEditor: React.FC<Props> = () => {
 
             <button onClick={onRenameButtonClick}>
                 Rename first Elem to TEST
+            </button>
+
+            <button onClick={addCharacter}>
+                Add X on first position (YJS)
             </button>
         </div>
     )
