@@ -2,23 +2,23 @@ import * as React from "react";
 import * as Y from 'yjs';
 
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { BaseEditor, Editor, createEditor, InsertNodeOperation, Node, NodeOperation, Operation, TextOperation, Transforms, Range, Descendant, Path } from "slate";
+import { BaseEditor, Editor, createEditor, InsertNodeOperation, Node, NodeOperation, Operation, TextOperation, Transforms, Range, Descendant, Path, NodeEntry } from "slate";
 import { isHotkey } from 'is-hotkey';
 import { Editable, ReactEditor, Slate, withReact } from "slate-react";
 import "./styles.css";
 import { OctopusScript } from "./types/OctopusScript";
 import { getTestScript, getSlateTestStudioElement } from "./data/TestScript";
-import { CustomElement, CustomText, SlateScript, SlateTextParagraph } from "./types/SlateScript";
+import { CustomElement, CustomText, SlateTextWrapperParagraph, SlateScript, SlateTextParagraph } from "./types/SlateScript";
 import * as ScriptRenderers from "./ScriptRenderers";
 import * as OctopusScriptMapper from "./mappers/OctopusScriptMapper";
 import * as SlateScriptMapper from "./mappers/SlateScriptMapper";
-import { withYjs, slateNodesToInsertDelta, YjsEditor, translateYjsEvent } from 'slate-yjs-mkr/core';
-import mitt, { Emitter, EventType } from "mitt";
-import * as awarenessProtocol from 'y-protocols/awareness.js'
+import { withYjs, slateNodesToInsertDelta, YjsEditor } from '@slate-yjs/core';
 import { ASClient } from "./utils/activeSync";
 import { Transaction } from "yjs";
 import { arrayToUint8Array, uint8ArrayToArray } from "./utils/Uint8ArrayUtils";
 import { shouldPlusButtonShow, togglePlusButton } from "./plusButtonHandler"
+import * as yOps from "./utils/yjsScriptOperations"
+import { withScriptEditor } from "./WithScriptEditor";
 
 
 declare module 'slate' {
@@ -38,13 +38,14 @@ const HOTKEYS = {
 
 const toggleMark = (editor: Editor, format: string) => {
     const isActive = isMarkActive(editor, format)
-    console.log(Editor.marks(editor));
+    console.log("Active marks at cursor", Editor.marks(editor));
 
     if (isActive) {
         Editor.removeMark(editor, format)
     } else {
+        let node = editor.node(editor.selection);
         Editor.addMark(editor, format, true);
-        Editor.addMark(editor, "pid", (Math.round(Math.random() * 10000)).toString());
+        console.log("CUR NODE", node);        
     }
 }
 
@@ -58,6 +59,7 @@ let sharedOctopusScript = getTestScript();
 //Slate script
 let sharedSlateScript = SlateScriptMapper.mapOctopusScriptToSlateScript(sharedOctopusScript);
 //Slate script to insert Delats for YJS;
+console.log(sharedSlateScript);
 const initialInsertDeltas = slateNodesToInsertDelta(sharedSlateScript);
 console.log("Initial insert deltas are:", initialInsertDeltas);
 
@@ -69,11 +71,11 @@ const initialSharedDoc = initialYDoc.get("content", Y.XmlText) as Y.XmlText;
 initialSharedDoc.applyDelta(initialInsertDeltas);
 interface Props { }
 
-//SIMPLE Emitter to emit and listen to YJS Updates within the window ...
-const mit = mitt();
-
 //NOTE: This story ID MUST EXIST in the backend, otherwise the solution does not work ...
-const storyId = 3107327319;
+//OLD STRUCT
+//const storyId = 3107327319;
+//NEW STRUCT
+const storyId = 3104137812
 
 export const ScriptEditor: React.FC<Props> = () => {
 
@@ -138,20 +140,22 @@ export const ScriptEditor: React.FC<Props> = () => {
             console.log(e.changes.delta);
             console.log("XML Doc");
             console.log(sharedType);
-
+            if (e.path.length == 1){
+                console.log ("The change must be decoded is on the lower levels");
+                e.changes.delta.forEach((delta, idx) =>{
+                    if (delta.insert) {
+                        const ins = delta.insert as any;
+                        console.log ("Delta number " + idx + ' attributes are ', ins.getAttributes());
+                        console.log ("Delta number " + idx + ' content is ', ins.toDelta());
+                    }
+                });
+            }
 
             if (!transaction.local) {
-                //NOTE: ATTEMPT TO READ OPS HERE - i.e. when transaction is REMOTE (see below) ENDS UP IN NOT MERGING A DOC PROPERLY ... 
                 console.log("REMOTE TRANSACTION OBSERVED");
-                //const targetElement = Node.get(editor, e.path as Path);
-                //console.log(translateYTextEvent(sharedType, sharedOctopusScript, e as Y.YTextEvent, e.path as number[]));
-
             }
             else {
-                //NOTE - this is a stolen method from slate-yjs, probably not want to use it to read the transactions ...
-                //let ops = translateYjsEvent(sharedType, editor, event[0]);
                 console.log("LOCAL TRANSACTION OBSERVED");
-                //console.log("OPERATIONS extracted from the document observation in client :" + yDoc.clientID, ops);
             }
         });
 
@@ -169,11 +173,7 @@ export const ScriptEditor: React.FC<Props> = () => {
                 console.log("REMOTE transaction - will not be re-sent to AS")
             }
         });
-        /*
-        yDoc.on("update", (updateEvent) => {
-            //NOTE OFF, to suport ActiveSync.
-        });
-        */
+
         return sharedType;
     }, []);
 
@@ -265,43 +265,12 @@ export const ScriptEditor: React.FC<Props> = () => {
 
     //NOTE: Editor initialization
     const [editor, setEditor] = useState(() => {
-        const slateJSWithYJSEditor: BaseEditor & ReactEditor = withYjs(withReact(createEditor()), sharedType);
-
-        //NOTE: Editors change listener - just for logging, to see how changes flow
-        /*
-        const { onChange } = slateJSWithYJSEditor;
-        slateJSWithYJSEditor.onChange = (change) => {
-            console.log("CATCHING EDITOR CHANGE", change);
-            if (change != null) {
-                console.log("CHANGE IN PROGRESS. CHANGE ", change);
-            }
-            onChange(change);
-        }
-        */
-
+        const slateJSWithYJSEditor: BaseEditor & ReactEditor = withYjs(withScriptEditor(withReact(createEditor())), sharedType);
         return slateJSWithYJSEditor;
     });
 
     //SlateJS'doc value. Initially empty. It is automatically filled from YJS CRDT Doc. 
     const [value, setValue] = useState<Node[]>([]);
-
-    //NOTE: Listening to "remote" (i.e other editors') changes emmited as YJS Updates and applying them as YJS Updates
-    /*NOTE: TURNED OFF TO SUPPORT ACTIVESync
-    
-    const emitter: Emitter<Record<EventType, unknown>> = useMemo(() => {
-        console.log("Initiating Emitter for " + sharedType.doc.clientID);
-        mit.on("*", (clientId, updateEvent: Uint8Array) => {
-            console.log("Incomming Event. I am " + sharedType.doc.clientID.toString() + ", event is coming from " + clientId.toString());
-            if (clientId !== sharedType.doc.clientID.toString()) {
-                console.log("Caught incoming event from client ID " + clientId.toString() + " with following update event: ", updateEvent, "Update will now be applied");
-                Y.applyUpdate(sharedType.doc, updateEvent);
-            }
-            else console.log("Ignoring my own event");
-        });
-    
-        return mit
-    }, []
-    );*/
 
     //Link YJS to SlateJS
     useEffect(() => {
@@ -315,6 +284,10 @@ export const ScriptEditor: React.FC<Props> = () => {
         switch (element.type) {
             case 'STUDIO':
                 return (ScriptRenderers.renderStudio(element, children));
+            case 'tag':
+                return (ScriptRenderers.renderTag(element, children, attributes));
+            case 'textElement':
+                return (ScriptRenderers.renderTextWrappingParagraph(element, children));
             default:
                 return null;
         }
@@ -423,38 +396,31 @@ export const ScriptEditor: React.FC<Props> = () => {
     };
 
     const addCharacter = () => {
-
-        const yElement: Y.Text = sharedType.toDelta()[0].insert;
-        console.log("SharedTypeToDelta", sharedType.toDelta());
-        yElement.insert(3, "X");
-    };
-
-    const deleteCharacter = () => {
-
-        const yElement: Y.Text = sharedType.toDelta()[0].insert;
-        yElement.delete(3,1);
+        yOps.addCharacter(sharedType, 0, 0, "X", 3);
     };
 
     const deleteElement = () => {
-        sharedType.delete(0,1);
+        yOps.deleteElement(sharedType, 0);
+    };
+
+    const deleteCharacter = () => {
+        yOps.deleteCharacter(sharedType, 0, 0, 3);
+    };
+
+    const deleteParagraph = () => {
+        yOps.deleteParagraph(sharedType, 0, 1);
     };
 
     const addStudioElement = () => {
-            
-        const yElement: Y.XmlText = new Y.XmlText();
-        yElement.setAttribute("elid", 99);
-        yElement.setAttribute("type", "STUDIO");
-        yElement.setAttribute("label", "YJS STUDIO");
-        yElement.insert(0,"123", {"pid":1, "type": "text"});
-        sharedType.applyDelta([{insert: yElement}]);
+        yOps.addElement(sharedType, { elid: 99, type: "STUDIO", label: "YJS STUDIO", content: [{ pid: "1", type: "text", text: "Studio Text" }] }, 0);
+    };
 
+    const renameElement = () => {
+        yOps.setElementAttribute(sharedType, 0, "label", "NEW NAME");
     };
 
     const formatItalic = () => {
-            
-        const yElement: Y.Text = sharedType.toDelta()[0].insert;
-        yElement.format(0,3,{italic: true});
-        
+        yOps.formatRange(sharedType, 0, 0, 0, 3, { italic: true });
     };
 
     //Editor component
@@ -491,19 +457,25 @@ export const ScriptEditor: React.FC<Props> = () => {
             <div>
                 <div>Direct YJS doc manipulation</div>
                 <button onClick={addCharacter}>
-                    Add X on 3rd position of the 1st element
+                    Add X on 3rd position of the 1st element nd 1st paragraph
                 </button>
                 <button onClick={deleteCharacter}>
-                    Remove a char on 3rd position of the 1st element
+                    Remove a char on 3rd position of the 1st paragraph in 1st element
                 </button>
                 <button onClick={formatItalic}>
-                    Format first three italic
+                    Format first three chars in first paragraph italic
                 </button>
                 <button onClick={addStudioElement}>
-                    Add Studio Element
+                    Add Studio Element @ 1st pos
                 </button>
                 <button onClick={deleteElement}>
                     Delete First Element
+                </button>
+                <button onClick={deleteParagraph}>
+                    Delete Second paragraph in 1st element
+                </button>
+                <button onClick={renameElement}>
+                    Rename First Element
                 </button>
             </div>
         </div>

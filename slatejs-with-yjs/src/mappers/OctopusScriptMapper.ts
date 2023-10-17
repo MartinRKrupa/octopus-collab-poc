@@ -3,7 +3,7 @@
  */
  
 import {OctopusScript, OctopusScriptElement, OctopusScriptTextParagraph, OctopusScriptTagParagraph} from "../types/OctopusScript";
-import { SlateScript, CustomElement, SlateTextParagraph, SlateTagParagraph } from "../types/SlateScript";
+import { SlateScript, CustomElement, SlateTextParagraph, SlateTagParagraph, SlateTextWrapperParagraph, SlateNoteParagraph } from "../types/SlateScript";
 
 function mapObjectValueIfExists(sourceValue, targetObject, targetPropName){
     if (sourceValue != null && sourceValue != undefined) {
@@ -12,8 +12,8 @@ function mapObjectValueIfExists(sourceValue, targetObject, targetPropName){
 }
 
 
-function mapTextParagraph (slateTextParagraph: SlateTextParagraph): OctopusScriptTextParagraph{
-    
+function mapTextParagraph (slateWrapperTextParagraph: SlateTextWrapperParagraph): OctopusScriptTextParagraph{
+    const slateTextParagraph = slateWrapperTextParagraph.children[0]
     let octopusTextParagraph = {
         pid: slateTextParagraph.pid,
         text: slateTextParagraph.text,
@@ -34,10 +34,10 @@ function mapTagParagraph (slateTagParagraph: SlateTagParagraph): OctopusScriptTa
     
     let octopusTagParagraph:OctopusScriptTagParagraph = {
         pid: slateTagParagraph.pid,
-        text: slateTagParagraph.text,
+        text: slateTagParagraph.elementText,
         type: 'tag',
         foreground: slateTagParagraph.foreground,
-        background: slateTagParagraph.background
+        background: slateTagParagraph.background,
     }
     mapObjectValueIfExists (slateTagParagraph.dur, octopusTagParagraph, "dur");
     mapObjectValueIfExists (slateTagParagraph.fontSize , octopusTagParagraph, "fontSize");
@@ -57,10 +57,10 @@ export function mapSlateScriptToOctopusScript(slateScript: SlateScript): Octopus
             label:  value.label,
             content: []         
         };
-        value.children.forEach( (value: SlateTextParagraph | SlateTagParagraph, index2) => {
+        value.children.forEach( (value: SlateTextWrapperParagraph | SlateTagParagraph | SlateNoteParagraph, index2) => {
             switch (value.type) {
                 case "text":
-                    const textVal = value as SlateTextParagraph;
+                    const textVal = value as SlateTextWrapperParagraph;
                     script.body[index].content[index2] = mapTextParagraph(textVal);
                     break;
                 case "tag":

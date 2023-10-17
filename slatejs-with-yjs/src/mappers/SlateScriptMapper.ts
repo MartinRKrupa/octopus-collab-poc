@@ -3,7 +3,7 @@
  */
  
 import {OctopusScript, OctopusScriptElement, OctopusScriptTextParagraph, OctopusScriptTagParagraph, OctopusScriptParagraph} from "../types/OctopusScript";
-import { SlateScript, CustomElement, SlateTextParagraph, SlateTagParagraph } from "../types/SlateScript";
+import { SlateScript, CustomElement, SlateTextParagraph, SlateTagParagraph, SlateTextWrapperParagraph } from "../types/SlateScript";
 
 function mapObjectValueIfExists(sourceValue, targetObject, targetPropName){
     if (sourceValue != null && sourceValue != undefined) {
@@ -18,7 +18,6 @@ function mapTextParagraph (octopusTextParagraph: OctopusScriptTextParagraph): Sl
         pid: octopusTextParagraph.pid,
         text: octopusTextParagraph.text,
         type: 'text',
-        children: null      
     }
     mapObjectValueIfExists (octopusTextParagraph.bold, slateTextParagraph, "bold");
     mapObjectValueIfExists (octopusTextParagraph.italic, slateTextParagraph, "italic");
@@ -35,11 +34,11 @@ function mapTagParagraph (octopusTagParagraph: OctopusScriptTagParagraph): Slate
     
     let slateTagParagraph:SlateTagParagraph = {
         pid: octopusTagParagraph.pid,
-        text: octopusTagParagraph.text,
+        elementText: octopusTagParagraph.text,
         type: 'tag',
         foreground: octopusTagParagraph.foreground,
         background: octopusTagParagraph.background,
-        children: null
+        children: [{text:""}]
     }
     mapObjectValueIfExists (octopusTagParagraph.dur, slateTagParagraph, "dur");
     mapObjectValueIfExists (octopusTagParagraph.fontSize , slateTagParagraph, "fontSize");
@@ -61,7 +60,9 @@ export function mapOctopusScriptToSlateScript(octopusScript: OctopusScript): Sla
             switch (value.type) {
                 case "text":
                     const textVal = value as OctopusScriptTextParagraph;
-                    script[index].children[index2] = mapTextParagraph(textVal);
+                    script[index].children[index2] = {type:"textElement", children:[]};
+                    let textWrapper = script[index].children[index2] as SlateTextWrapperParagraph; 
+                    textWrapper.children[0] = mapTextParagraph(textVal);
                     break;
                 case "tag":
                     const tagVal = value as OctopusScriptTagParagraph;

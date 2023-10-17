@@ -1,5 +1,5 @@
 import { OctopusScript, OctopusScriptElement } from "../types/OctopusScript"
-import { CustomElement, SlateTagParagraph, SlateTextParagraph } from "../types/SlateScript";
+import { CustomElement, SlateNoteParagraph, SlateTagParagraph, SlateTextParagraph, SlateTextWrapperParagraph } from "../types/SlateScript";
 
 const dummyScript: OctopusScript = {
     body: [{
@@ -36,41 +36,48 @@ const dummyScript: OctopusScript = {
     }]
 };
 
-export function getTestScript(): OctopusScript {    
+export function getTestScript(): OctopusScript {
     return dummyScript;
 }
 
-export function getSlateTestStudioElement(elid): CustomElement {    
+export function getSlateTestStudioElement(elid): CustomElement {
     return {
         type: 'STUDIO',
         label: 'ŠTÚDIO 2',
         elid: elid,
         children: [{
-            type: 'text',
-            text: 'A NEW STUDIO with',
-            pid: "1",
-            children: null
-        } as SlateTextParagraph,
+            type: 'textElement',
+            children: [
+                {
+                    type: 'text',
+                    text: 'A NEW STUDIO with',
+                    pid: "1"
+                } as SlateTextParagraph
+            ]
+        } as SlateTextWrapperParagraph,
         {
             type: 'tag',
-            text: "MYTAG",
+            elementText: "MYTAG",
             foreground: "#FF0000",
             background: "#000000",
             pid: "1",
-            children: null        
         } as SlateTagParagraph,
         {
             type: 'note',
-            text: "This is a technical note jako prase",
+            elementText: "This is a technical note jako prase",
             pid: "1",
-            children: null        
-        } as SlateTagParagraph,
+        } as SlateNoteParagraph,
         {
-            type: 'text',
-            text: 'a bold text',
-            bold: true,
-            pid: "2",
-            children: null
-        } as SlateTextParagraph],
+            type: 'textElement',
+            children: [
+                {
+                    type: 'text',
+                    text: 'a bold text',
+                    bold: true,
+                    pid: "2",
+                } as SlateTextParagraph
+            ]
+        } as SlateTextWrapperParagraph
+        ]
     }
 }
