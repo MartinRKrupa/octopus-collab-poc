@@ -1,5 +1,6 @@
 import * as Y from 'yjs';
-import { OctopusScriptElement } from '../types/OctopusScript';
+import { OctopusScriptElement, OctopusScriptParagraph } from '../types/OctopusScript';
+import { arrayToUint8Array } from './Uint8ArrayUtils';
 
 /**
  * 
@@ -10,9 +11,9 @@ import { OctopusScriptElement } from '../types/OctopusScript';
 function getElementByIndexNo(sharedType: Y.XmlText, elementIndex: number, paragraphIndex?: number):Y.Text {
     const yElement = sharedType.toDelta() && sharedType.toDelta().length > elementIndex && sharedType.toDelta()[elementIndex].insert ? sharedType.toDelta()[elementIndex].insert : null;
     const yParagraph: Y.Text = paragraphIndex != null && yElement.toDelta() && yElement.toDelta().length > paragraphIndex && yElement.toDelta()[paragraphIndex].insert ? yElement.toDelta()[paragraphIndex].insert : null;
-    console.log("Shared Type to delta is" , sharedType.toDelta());
-    console.log("Delta Y ELement IS" , yElement);
-    console.log("Paragraph Y ELement IS" , yParagraph);    
+    console.log("Shared Type to delta is" , sharedType.toDelta(), sharedType.getAttributes());
+    console.log("Delta Y ELement IS" , yElement, yElement.getAttributes());
+    console.log("Paragraph Y ELement IS" , yParagraph, yParagraph ? yParagraph.getAttributes() : null);    
     return yParagraph ? yParagraph : yElement;
 }
 
@@ -27,17 +28,51 @@ export function addCharacter(sharedType: Y.XmlText, elementIndex: number, paragr
     //sharedType is the YXML content of YJS
     const yElement: Y.Text = getElementByIndexNo(sharedType, elementIndex, paragraphIndex);
     if (yElement){
-        console.debug("Adding character to into YJS Doc Element " + elementIndex + ", position " + position);
+        console.debug("Adding character to into YJS Doc Element " + elementIndex + ", paragraph " + paragraphIndex + " position " + position);
         yElement.insert(position, character, format);
     }
 };
 
+/**
+ * 
+ * @param sharedType 
+ * @param elementIndex 
+ * @param paragraphIndex 
+ * @param attributeName 
+ * @param value 
+ */
+export function setParagraphAttributes(sharedType: Y.XmlText, elementIndex:number, paragraphIndex:number, attributes: Map <string, string | number | boolean>) {
+    //WHEN ADDING TEXTS, shared Type has to be transformed to deltas to pick correct Element for manipulation
+    //sharedType is the YXML content of YJS
+    const yElement: Y.Text = getElementByIndexNo(sharedType, elementIndex, paragraphIndex);
+    if (yElement){
+        console.debug("Setting property of Element " + elementIndex + ", paragraph " + paragraphIndex + " attributes ", attributes);
+        Y.transact(sharedType.doc, ()=>{
+            attributes.forEach((value, attributeName)=>{
+                if (value != null)
+                    yElement.setAttribute(attributeName, value);        
+                else 
+                    yElement.removeAttribute(attributeName);
+            });
+        });
+    }
+};
+
+/**
+ * 
+ * @param sharedType 
+ * @param elementIndex 
+ * @param paragraphIndex 
+ * @param position 
+ * @param length 
+ * @param format 
+ */
 export function formatRange(sharedType: Y.XmlText, elementIndex: number, paragraphIndex: number, position: number, length: number, format: Object) {
     //WHEN ADDING TEXTS, shared Type has to be transformed to deltas to pick correct Element for manipulation
     //sharedType is the YXML content of YJS 
     const yElement: Y.Text = getElementByIndexNo(sharedType, elementIndex, paragraphIndex);
     if (yElement){
-        console.debug("Adding character to into YJS Doc Element " + elementIndex + ", position " + position);
+        console.debug("Formatting YJS Doc Element " + elementIndex +  ", paragraph " + paragraphIndex + ", position " + position);
         yElement.format(position, length, format);
     }
 };
@@ -55,6 +90,14 @@ export function deleteElement (sharedType: Y.XmlText, elementIndex: number) {
     }
 };
 
+/**
+ * 
+ * @param sharedType 
+ * @param elementIndex 
+ * @param paragraphIndex 
+ * @param position 
+ * @param length 
+ */
 export function deleteCharacter(sharedType: Y.XmlText, elementIndex: number, paragraphIndex: number, position: number, length: number = 1) {
     //WHEN ADDING TEXTS, shared Type has to be transformed to deltas to pick correct Element for manipulation
     //sharedType is the YXML content of YJS 
@@ -91,9 +134,47 @@ export function addElement (sharedType: Y.XmlText, element: OctopusScriptElement
         Object.keys(paragraph).forEach((key)=>{
             if (key != "text") formattingObject[key] = paragraph[key];
         }); 
-        yElement.insert(0, paragraph.text ? paragraph.text : "", formattingObject);
+        if (paragraph.type == "text"){
+            const paragraphElem: Y.XmlText = new Y.XmlText();
+            paragraphElem.setAttribute("type", "textElement");
+            paragraphElem.insert(0, paragraph.text ? paragraph.text : "", formattingObject);
+            yElement.applyDelta([{insert: paragraphElem}]);
+
+        }
+        else {
+            yElement.insert(0, paragraph.text ? paragraph.text : "", formattingObject);
+        }
+
     })
    sharedType.applyDelta([{insert: yElement}]);
+};
+
+export function addParagraph (sharedType: Y.XmlText, elementIndex: number, paragraph: OctopusScriptParagraph, index: number) { 
+    
+    const yElement: Y.Text = getElementByIndexNo(sharedType, elementIndex);           
+    let formattingObject = {}; 
+    Object.keys(paragraph).forEach((key)=>{
+        if (key != "text") formattingObject[key] = paragraph[key];
+    }); 
+
+    if (paragraph.type == "text"){
+        const paragraphElem: Y.XmlText = new Y.XmlText();
+        paragraphElem.setAttribute("type", "textElement");
+        paragraphElem.insert(0, paragraph.text ? paragraph.text : "", formattingObject);
+        yElement.applyDelta([{retain:index} , {insert: paragraphElem}]);
+    }
+    else {
+        if (paragraph.type == "tag"){
+            const paragraphElem: Y.XmlText = new Y.XmlText();
+            if (paragraph.text && paragraph.text !="") formattingObject["elementText"] = paragraph.text;
+            Object.keys(formattingObject).forEach((key)=>{
+                paragraphElem.setAttribute(key, formattingObject[key]);
+            });
+            yElement.applyDelta([{retain:index} , {insert: paragraphElem}]);
+        }
+    }
+
+   //sharedType.applyDelta([{insert: yElement}]);
 };
 
 /**
@@ -108,6 +189,18 @@ export function setElementAttribute (sharedType: Y.XmlText, elementIndex:number,
     const yElement: Y.Text = sharedType.toDelta() && sharedType.toDelta().length > elementIndex && sharedType.toDelta()[elementIndex].insert ? sharedType.toDelta()[elementIndex].insert : null;
     if (yElement){
         console.debug("Changing attribute of YJS Doc Element " + elementIndex + ", attr " + attributeName + ", value " + value );
-        yElement.setAttribute(attributeName, value);
+        if (value != null)        
+            yElement.setAttribute(attributeName, value);
+        else
+            yElement.removeAttribute(attributeName);        
     }
 };
+
+/**
+ * 
+ * @param sharedType 
+ * @param changeArray 
+ */
+export function updateSharedTypeFromAS(sharedType: Y.XmlText, changeArray: []){
+    Y.applyUpdate(sharedType.doc, arrayToUint8Array(changeArray));
+}

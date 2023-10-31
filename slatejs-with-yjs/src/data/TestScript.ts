@@ -8,25 +8,21 @@ const dummyScript: OctopusScript = {
         elid: 0,
         content: [
             {
-                pid: '1',
                 type: 'text',
                 text: 'OBYC TEXT '
             },
             {
-                pid: '2',
                 type: 'text',
                 bold: true,
                 text: 'BOLD TEXT '
             },
             {
-                pid: '4',
                 type: 'tag',
                 foreground: "#FF0000",
                 background: "#000000",
                 text: 'THIS IS A TAG'
             },
             {
-                pid: '3',
                 type: 'text',
                 italic: true,
                 text: ' ITALIC TEXT \nON 2 LINES'
@@ -51,7 +47,6 @@ export function getSlateTestStudioElement(elid): CustomElement {
                 {
                     type: 'text',
                     text: 'A NEW STUDIO with',
-                    pid: "1"
                 } as SlateTextParagraph
             ]
         } as SlateTextWrapperParagraph,
@@ -60,12 +55,10 @@ export function getSlateTestStudioElement(elid): CustomElement {
             elementText: "MYTAG",
             foreground: "#FF0000",
             background: "#000000",
-            pid: "1",
         } as SlateTagParagraph,
         {
             type: 'note',
             elementText: "This is a technical note jako prase",
-            pid: "1",
         } as SlateNoteParagraph,
         {
             type: 'textElement',
@@ -74,7 +67,6 @@ export function getSlateTestStudioElement(elid): CustomElement {
                     type: 'text',
                     text: 'a bold text',
                     bold: true,
-                    pid: "2",
                 } as SlateTextParagraph
             ]
         } as SlateTextWrapperParagraph

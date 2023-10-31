@@ -18,7 +18,8 @@ import { Transaction } from "yjs";
 import { arrayToUint8Array, uint8ArrayToArray } from "./utils/Uint8ArrayUtils";
 import { shouldPlusButtonShow, togglePlusButton } from "./plusButtonHandler"
 import * as yOps from "./utils/yjsScriptOperations"
-import { withScriptEditor } from "./WithScriptEditor";
+import { withOctopusNormalizedEditor } from "./WithScriptEditor";
+import { ScriptChange, YJsScriptChangeListener } from "./YJsScriptChangeListener";
 
 
 declare module 'slate' {
@@ -45,7 +46,7 @@ const toggleMark = (editor: Editor, format: string) => {
     } else {
         let node = editor.node(editor.selection);
         Editor.addMark(editor, format, true);
-        console.log("CUR NODE", node);        
+        console.log("CUR NODE", node);
     }
 }
 
@@ -75,12 +76,14 @@ interface Props { }
 //OLD STRUCT
 //const storyId = 3107327319;
 //NEW STRUCT
-const storyId = 3104137812
+const storyId = 3107327319
 
 export const ScriptEditor: React.FC<Props> = () => {
 
     const plusRef = React.useRef();
     const labelRef = React.useRef();
+    const logRef = React.useRef();
+
 
     const yDoc = useMemo(() => {
         const yDoc = new Y.Doc();
@@ -104,7 +107,7 @@ export const ScriptEditor: React.FC<Props> = () => {
     },[]);
     */
 
-    // Create a yjs document and get the shared type
+    // Create a yjs document and get the shared type    
     const sharedType = useMemo(() => {
         const sharedType = yDoc.get("content", Y.XmlText) as Y.XmlText;
         //NOTE: Initialze the doc from the same source and so, upcoming changes will have a shared starting tracking point.. otherwise the initial merge can be a mess and also applyUpdate(event) will not work ...
@@ -118,50 +121,17 @@ export const ScriptEditor: React.FC<Props> = () => {
         /**
          * NOTE: THIS IS TO BE IMPLEMENTED IN REMOTE JAVA CLIENT. IT HAS TO OBSERVE AND AND PROPERLY APPLY CHANGES.
         */
-        sharedType.observeDeep((event, transaction) => {
-            console.log("OBSERVING Document change - EVENT/TRANSACTION:", event, transaction);
-
-            const e = event[0] as Y.YEvent<any>;
-            const target = e.target as Y.XmlText;
-
-            console.log("PATH", e.path);
-            console.log("TRANSACTIOn", e.transaction);
-            console.log("KEYS", e.keys);
-            console.log("CURRENT TARGET", e.currentTarget);
-            console.log("TARGET", target);
-            console.log("TARGET DOM", target.toDOM());
-            console.log("CHANGES", e.changes);
-            console.log("DELTA", e.changes.delta);
-            console.log("TRANSACTION T", transaction);
-            console.log("Change details");
-            console.log(e.changes.keys);
-            console.log(e.changes.added);
-            console.log(e.changes.deleted);
-            console.log(e.changes.delta);
-            console.log("XML Doc");
-            console.log(sharedType);
-            if (e.path.length == 1){
-                console.log ("The change must be decoded is on the lower levels");
-                e.changes.delta.forEach((delta, idx) =>{
-                    if (delta.insert) {
-                        const ins = delta.insert as any;
-                        console.log ("Delta number " + idx + ' attributes are ', ins.getAttributes());
-                        console.log ("Delta number " + idx + ' content is ', ins.toDelta());
-                    }
-                });
-            }
-
-            if (!transaction.local) {
-                console.log("REMOTE TRANSACTION OBSERVED");
-            }
-            else {
-                console.log("LOCAL TRANSACTION OBSERVED");
-            }
-        });
-
+        const sharedTypeCallbackFn = (changes: ScriptChange[]) => {
+            console.log("Y JS SCRIPT CHANGES:", changes);
+            const logElem: HTMLDivElement = logRef.current;
+            logElem.innerText = "CHANGES START: \n " + JSON.stringify(changes, null, 4) + "\n-------------\n" + logElem.innerText;
+        }
+        const scriptChangeListener = new YJsScriptChangeListener(sharedType, sharedTypeCallbackFn);
+        
         yDoc.on("update", (update: Uint8Array, origin: any, doc: Y.Doc, tr: Transaction) => {
             console.log("UPDATE EVENT, following are the update / origin / doc / transaction", update, origin, doc, tr);
-            console.log("DECODED INCOMING CHANGE", Y.decodeUpdate(update));
+            const decodedUpdate = Y.decodeUpdate(update);
+            console.log("DECODED INCOMING CHANGE", decodedUpdate);
 
             if (tr.local) {
                 const changeReqBody = { "change": uint8ArrayToArray(update) };
@@ -173,6 +143,9 @@ export const ScriptEditor: React.FC<Props> = () => {
                 console.log("REMOTE transaction - will not be re-sent to AS")
             }
         });
+        /**
+         * End of what needs to be implemented in Java
+         */
 
         return sharedType;
     }, []);
@@ -205,11 +178,8 @@ export const ScriptEditor: React.FC<Props> = () => {
                     else {
                         if (sharedType.toJSON() == "") {
                             console.log("Inital state found. Initializing doc from the remote");
-                            const update = arrayToUint8Array(asRow.state);
-
-                            Y.applyUpdate(sharedType.doc, update);
+                            yOps.updateSharedTypeFromAS(sharedType, asRow.state);
                             editor.normalize();
-
                         }
                         else {
                             console.log("Document already initialized, skipping state initialization from remote");
@@ -221,28 +191,9 @@ export const ScriptEditor: React.FC<Props> = () => {
                     const decodedUpdate = Y.decodeUpdate(update);
                     console.log("Encoded Change Retrieved by client " + client.getClientId() + ". It will now be applied to doc " + sharedType.doc.clientID);
                     console.log("Decoded update", decodedUpdate);
-                    let remoteChangeFound = false;
-
-                    //NOTE:Search in added structs
-                    decodedUpdate.structs.forEach((struct, idx) => {
-                        if (struct.id.client != sharedType.doc.clientID) {
-                            console.log("One of the updates [" + idx + "] was perfromed by remote client " + struct.id.client + ".I am " + sharedType.doc.clientID + " Applying")
-                            if (remoteChangeFound == false) remoteChangeFound = true;
-                        }
-                    });
-
-                    //NOTE: Also search in DeleteSet 
-                    decodedUpdate.ds.clients.forEach((value, key) => {
-                        if (key != sharedType.doc.clientID) {
-                            console.log("One of the dss [" + key + "] was perfromed by remote client " + key + ".I am " + sharedType.doc.clientID + " Applying")
-                            if (remoteChangeFound == false) remoteChangeFound = true;
-                        }
-                    });
-                    console.log("remoteChangeFound", remoteChangeFound)
-                    if (remoteChangeFound) {
-                        console.log("Change will now apply");
-                        Y.applyUpdate(sharedType.doc, update);
-                    }
+                    console.log("Change will now apply");
+                    //NOTE - no need to worry to apply a change that might've been triggered by the ery same client. It will simply produce no change event ...  
+                    yOps.updateSharedTypeFromAS(sharedType, asRow.change)
                 }
             }
         }
@@ -265,7 +216,7 @@ export const ScriptEditor: React.FC<Props> = () => {
 
     //NOTE: Editor initialization
     const [editor, setEditor] = useState(() => {
-        const slateJSWithYJSEditor: BaseEditor & ReactEditor = withYjs(withScriptEditor(withReact(createEditor())), sharedType);
+        const slateJSWithYJSEditor: BaseEditor & ReactEditor = withYjs(withOctopusNormalizedEditor(withReact(createEditor())), sharedType);
         return slateJSWithYJSEditor;
     });
 
@@ -375,26 +326,6 @@ export const ScriptEditor: React.FC<Props> = () => {
         togglePlusButton(wordUnderCursor, plusRef.current);
     };
 
-    //Adding a new Sript Element into slate's doc - for testing purposes.
-    const onNewElementButtonClick = () => {
-        const op: InsertNodeOperation = {
-            type: 'insert_node',
-            path: [0],
-            node: getSlateTestStudioElement(editor.children.length)
-        };
-        editor.apply(op);
-    };
-
-    //Renaming a first Script Element as a rename on slate's doc - for testing purposes. 
-    const onRenameButtonClick = () => {
-        Transforms.setNodes(editor, {
-            label: "TEST"
-        }
-            , {
-                at: [0]
-            });
-    };
-
     const addCharacter = () => {
         yOps.addCharacter(sharedType, 0, 0, "X", 3);
     };
@@ -412,71 +343,104 @@ export const ScriptEditor: React.FC<Props> = () => {
     };
 
     const addStudioElement = () => {
-        yOps.addElement(sharedType, { elid: 99, type: "STUDIO", label: "YJS STUDIO", content: [{ pid: "1", type: "text", text: "Studio Text" }] }, 0);
+        yOps.addElement(sharedType, { elid: 99, type: "STUDIO", label: "YJS STUDIO", content: [{ type: "text", text: "Studio Text" }] }, 0);
     };
 
     const renameElement = () => {
         yOps.setElementAttribute(sharedType, 0, "label", "NEW NAME");
     };
 
+    const addCueIn = () => {
+        yOps.setElementAttribute(sharedType, 0, "cuein", 1000);
+    };
+
+    const removeCueIn = () => {
+        yOps.setElementAttribute(sharedType, 0, "cuein", null);
+    };
+    const colorTag = () => {
+        const attrs = new Map;
+        attrs.set("foreground", "#00FF00");
+        attrs.set("background", "grey");
+        
+        yOps.setParagraphAttributes(sharedType, 0, 2, attrs);
+    }
+
     const formatItalic = () => {
         yOps.formatRange(sharedType, 0, 0, 0, 3, { italic: true });
     };
+
+    const addTagParagraph = () => {
+        yOps.addParagraph(sharedType, 0, {type: "tag", text: " THIS IS A VERY NEW TAG ", foreground: "#0000FF", background: "yellow"}, 1)
+    }
 
     //Editor component
     return (
         <div>
             <div ref={plusRef} style={{ display: "none", position: "absolute", left: "0", top: "0", width: "25px", height: "25px", backgroundColor: "green" }}>+</div>
             <div ref={labelRef}>...label goes here</div>
-            <Slate editor={editor} initialValue={value as Descendant[]} onChange={newValue => {
-                setValue(newValue);
-                const slateScript = newValue as SlateScript;
-                console.debug("Slate JS: ");
-                console.debug(slateScript);
-                console.debug("Octopus script's new value:");
-                console.debug(OctopusScriptMapper.mapSlateScriptToOctopusScript(slateScript));
-            }}>
-                <Editable
-                    renderElement={renderElement}
-                    renderLeaf={renderParagraph}
-                    placeholder="Enter some rich text…"
-                    spellCheck
-                    autoFocus
-                    onKeyDown={slateKeyDownEvent}
-                    onKeyUp={slateKeyUpEvent}
-                />
-            </Slate>
-            <div>SlateJS doc manipulation</div>
-            <button onClick={onNewElementButtonClick}>
-                Add a new Element
-            </button>
+            <div style={{ display: "inline-block", width: "50%" }}>
+                <Slate editor={editor} initialValue={value as Descendant[]} onChange={newValue => {
+                    setValue(newValue);
+                    const slateScript = newValue as SlateScript;
+                    console.debug("Slate JS: ");
+                    console.debug(slateScript);
+                    console.debug("Octopus script's new value:");
+                    console.debug(OctopusScriptMapper.mapSlateScriptToOctopusScript(slateScript));
+                }}>
+                    <Editable
+                        renderElement={renderElement}
+                        renderLeaf={renderParagraph}
+                        placeholder="Enter some rich text…"
+                        spellCheck
+                        autoFocus
+                        onKeyDown={slateKeyDownEvent}
+                        onKeyUp={slateKeyUpEvent}
+                    />
+                </Slate>
+                <div>
+                    <div>Direct YJS doc manipulation</div>
+                    <div>ELEMENT</div>
 
-            <button onClick={onRenameButtonClick}>
-                Rename first Elem to TEST
-            </button>
-            <div>
-                <div>Direct YJS doc manipulation</div>
-                <button onClick={addCharacter}>
-                    Add X on 3rd position of the 1st element nd 1st paragraph
-                </button>
-                <button onClick={deleteCharacter}>
-                    Remove a char on 3rd position of the 1st paragraph in 1st element
-                </button>
-                <button onClick={formatItalic}>
-                    Format first three chars in first paragraph italic
-                </button>
-                <button onClick={addStudioElement}>
-                    Add Studio Element @ 1st pos
-                </button>
-                <button onClick={deleteElement}>
-                    Delete First Element
-                </button>
-                <button onClick={deleteParagraph}>
-                    Delete Second paragraph in 1st element
-                </button>
-                <button onClick={renameElement}>
-                    Rename First Element
-                </button>
+                    <button onClick={addStudioElement}>
+                        Add Studio Element @ 1st pos
+                    </button>
+                    <button onClick={deleteElement}>
+                        Delete First Element
+                    </button>
+                    <button onClick={renameElement}>
+                        Rename First Element to 'NEW NAME'
+                    </button>
+                    <button onClick={addCueIn}>
+                        Add attribute to an element - cuein
+                    </button>
+                    <button onClick={removeCueIn}>
+                        Remove attribute from an element - cuein
+                    </button>
+                    <div>PARAGRAPH</div>
+                    <button onClick={addTagParagraph}>
+                        Add tag paragraph @2nd pos in 1st element
+                    </button>
+                    <button onClick={deleteParagraph}>
+                        Delete Second paragraph in 1st element
+                    </button>
+                    <button onClick={colorTag}>
+                        Set attribute of a paragraph - Tag's FG color
+                    </button>
+                    <div>TEXT</div>
+                    <button onClick={formatItalic}>
+                        Format first three chars in first paragraph italic
+                    </button>
+                    <button onClick={addCharacter}>
+                        Add X on 3rd position of the 1st element nd 1st paragraph
+                    </button>
+                    <button onClick={deleteCharacter}>
+                        Remove a char on 3rd position of the 1st paragraph in 1st element
+                    </button>
+                </div>
+            </div>
+            <div style={{ display: "inline-block", width: "45%", verticalAlign: "top", marginLeft: "10px", }}>
+                <div>CHANGE LOG (with newest on top):</div>
+                <div ref={logRef} style={{ whiteSpace: "pre", border: "1px solid black", height: "500px", overflowY: "scroll", }}></div>
             </div>
         </div>
     )

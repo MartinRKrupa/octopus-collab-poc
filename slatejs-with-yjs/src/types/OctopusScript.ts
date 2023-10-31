@@ -3,7 +3,6 @@
  */
 
 export interface OctopusScriptTextParagraph {
-    pid: string,
     type: string,
     text: string,
     bold?: boolean,
@@ -15,7 +14,6 @@ export interface OctopusScriptTextParagraph {
 }
 
 export interface OctopusScriptTagParagraph {
-    pid: string,
     type: string,
     text: string,
     dur?: number,

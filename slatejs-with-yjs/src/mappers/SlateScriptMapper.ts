@@ -15,7 +15,6 @@ function mapObjectValueIfExists(sourceValue, targetObject, targetPropName){
 function mapTextParagraph (octopusTextParagraph: OctopusScriptTextParagraph): SlateTextParagraph{
     
     let slateTextParagraph: SlateTextParagraph = {
-        pid: octopusTextParagraph.pid,
         text: octopusTextParagraph.text,
         type: 'text',
     }
@@ -33,7 +32,6 @@ function mapTextParagraph (octopusTextParagraph: OctopusScriptTextParagraph): Sl
 function mapTagParagraph (octopusTagParagraph: OctopusScriptTagParagraph): SlateTagParagraph{
     
     let slateTagParagraph:SlateTagParagraph = {
-        pid: octopusTagParagraph.pid,
         elementText: octopusTagParagraph.text,
         type: 'tag',
         foreground: octopusTagParagraph.foreground,

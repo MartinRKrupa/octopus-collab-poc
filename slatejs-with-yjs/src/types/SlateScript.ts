@@ -20,7 +20,6 @@ export type SlateTextWrapperParagraph = {
 }
 
 export type SlateTextParagraph = {
-  pid: string,
   type: string,
   text: string,
   bold?: boolean,
@@ -32,7 +31,6 @@ export type SlateTextParagraph = {
   }
 
 export type SlateTagParagraph = {
-  pid: string,
   type: string,
   elementText: string,
   dur?: number,
@@ -43,7 +41,6 @@ export type SlateTagParagraph = {
 }
 
 export type SlateNoteParagraph = {
-  pid: string,
   type: string,
   elementText: string,
   children: [{text:string}]
