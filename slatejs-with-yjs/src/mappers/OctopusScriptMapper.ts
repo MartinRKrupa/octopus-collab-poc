@@ -2,70 +2,54 @@
  * Maps SlateScript Object to Octopus Script
  */
  
-import {OctopusScript, OctopusScriptElement, OctopusScriptTextParagraph, OctopusScriptTagParagraph} from "../types/OctopusScript";
-import { SlateScript, CustomElement, SlateTextParagraph, SlateTagParagraph, SlateTextWrapperParagraph, SlateNoteParagraph } from "../types/SlateScript";
+import {OctopusScript, OctopusScriptElement, OctopusScriptTextParagraph, OctopusScriptTagParagraph, OctopusScriptElementType, OctopusScriptParagraph} from "../types/OctopusScript";
+import { SlateParagraph, SlateTextParagraph, SlateTextWrapperParagraph } from "../types/SlateScript";
 
-function mapObjectValueIfExists(sourceValue, targetObject, targetPropName){
-    if (sourceValue != null && sourceValue != undefined) {
-        targetObject[targetPropName] = sourceValue;
-    }
+function getProperParagraphToExtract(scriptParagaph: SlateParagraph): SlateParagraph | SlateTextParagraph{
+    if (scriptParagaph.type == "textElement"){
+        const textWrapperElement = scriptParagaph as SlateTextWrapperParagraph;
+        if (textWrapperElement.children && textWrapperElement.children.length > 0) {
+            return textWrapperElement.children[0];
+        }
+        else return null;
+    } 
+    else return scriptParagaph;
 }
 
-
-function mapTextParagraph (slateWrapperTextParagraph: SlateTextWrapperParagraph): OctopusScriptTextParagraph{
-    const slateTextParagraph = slateWrapperTextParagraph.children[0]
-    let octopusTextParagraph = {
-        text: slateTextParagraph.text,
-        type: 'text'        
-    }
-    mapObjectValueIfExists (slateTextParagraph.bold, octopusTextParagraph, "bold");
-    mapObjectValueIfExists (slateTextParagraph.italic, octopusTextParagraph, "italic");
-    mapObjectValueIfExists (slateTextParagraph.underline, octopusTextParagraph, "underline");
-    mapObjectValueIfExists (slateTextParagraph.dontCount, octopusTextParagraph, "dontCount");
-    mapObjectValueIfExists (slateTextParagraph.ignore, octopusTextParagraph, "ignore");
-    mapObjectValueIfExists (slateTextParagraph.rtl, octopusTextParagraph, "rtl");
-
-    return octopusTextParagraph;
-
-}
-
-function mapTagParagraph (slateTagParagraph: SlateTagParagraph): OctopusScriptTagParagraph{
+export function mapSlateElementToOctopusParagraph(scriptParagaph: SlateParagraph): OctopusScriptParagraph{
     
-    let octopusTagParagraph:OctopusScriptTagParagraph = {
-        text: slateTagParagraph.elementText,
-        type: 'tag',
-        foreground: slateTagParagraph.foreground,
-        background: slateTagParagraph.background,
-    }
-    mapObjectValueIfExists (slateTagParagraph.dur, octopusTagParagraph, "dur");
-    mapObjectValueIfExists (slateTagParagraph.fontSize , octopusTagParagraph, "fontSize");
-    return octopusTagParagraph;
+    //NOTE: There's no paragraph with null, unless its a Slate's empty text node.
+    if (scriptParagaph.type == null) return null;
+    
+    let textAttributeMap = new Map ([["tagText", "text"],["noteText", "text"]]);
+    let nodeToInsert: any = {};
 
+    
+    let slateParagraphToExtract = getProperParagraphToExtract(scriptParagaph);
+    Object.getOwnPropertyNames(slateParagraphToExtract).forEach((attrName)=>{
+        let useAttrName = textAttributeMap.has(attrName) ? textAttributeMap.get(attrName) : attrName;
+        nodeToInsert[useAttrName] = slateParagraphToExtract[attrName];
+    });
+
+    return nodeToInsert;
 }
 
-export function mapSlateScriptToOctopusScript(slateScript: SlateScript): OctopusScript{
+export function mapSlateScriptToOctopusScript(slateScript: any): OctopusScript{
     let script:OctopusScript = {
-        body: [] as OctopusScriptElement[]
+        body: [] as OctopusScriptElement[],
+        version: 1
     }
 
-    slateScript.forEach((value:CustomElement, index: number) => {
+    slateScript.forEach((value:any, index: number) => {
         script.body[index] = {
             elid: value.elid,
-            type:  value.type,
+            type:  value.type as OctopusScriptElementType,
             label:  value.label,
             content: []         
         };
-        value.children.forEach( (value: SlateTextWrapperParagraph | SlateTagParagraph | SlateNoteParagraph, index2) => {
-            switch (value.type) {
-                case "text":
-                    const textVal = value as SlateTextWrapperParagraph;
-                    script.body[index].content[index2] = mapTextParagraph(textVal);
-                    break;
-                case "tag":
-                    const tagVal = value as SlateTagParagraph;
-                    script.body[index].content[index2] = mapTagParagraph(tagVal);
-                    break;
-            }
+        value.children.forEach( (slateParagraph: any, paragraphIndex) => {
+            const paragraphToAdd =  mapSlateElementToOctopusParagraph(slateParagraph); 
+            if (paragraphToAdd) script.body[index].content.push (paragraphToAdd);
         });
     });
 

@@ -1,9 +1,9 @@
-import { OctopusScript, OctopusScriptElement } from "../types/OctopusScript"
-import { CustomElement, SlateNoteParagraph, SlateTagParagraph, SlateTextParagraph, SlateTextWrapperParagraph } from "../types/SlateScript";
+import { OctopusScript, OctopusScriptElement, OctopusScriptElementType, OctopusScriptParagraphType } from "../types/OctopusScript"
 
 const dummyScript: OctopusScript = {
+    version: 1,
     body: [{
-        type: "STUDIO",
+        type: OctopusScriptElementType.STUDIO,
         label: "ŠTÚDIO",
         elid: 0,
         content: [
@@ -26,50 +26,42 @@ const dummyScript: OctopusScript = {
                 type: 'text',
                 italic: true,
                 text: ' ITALIC TEXT \nON 2 LINES'
+            },
+            {
+                type: 'cg',
+                cmdId: 12345,
+                in: 0,
+                out: 0,
+                lines: ["line 1", "line 2"]    
+            },
+            {
+                type: 'pres',
+                user: {
+                    globalId: "user_12345",
+                    id: 12345,
+                    modified: new Date().getTime(),
+                    objectType: "user",
+                }
+            },
+            {
+                type: 'note',
+                text: ' THIS IS A TECHNICAL NOTE'
+            },
+            {
+                type: 'mos',
+                cmdId: 12345,
+                in: 0,
+                out: 0,
+                object: {
+                    objectId: 23456,
+                    mosId: "Astra",
+                    objId: "AstraSeNeflaka12345"
+                }   
             }
-
         ]
     }]
 };
 
 export function getTestScript(): OctopusScript {
     return dummyScript;
-}
-
-export function getSlateTestStudioElement(elid): CustomElement {
-    return {
-        type: 'STUDIO',
-        label: 'ŠTÚDIO 2',
-        elid: elid,
-        children: [{
-            type: 'textElement',
-            children: [
-                {
-                    type: 'text',
-                    text: 'A NEW STUDIO with',
-                } as SlateTextParagraph
-            ]
-        } as SlateTextWrapperParagraph,
-        {
-            type: 'tag',
-            elementText: "MYTAG",
-            foreground: "#FF0000",
-            background: "#000000",
-        } as SlateTagParagraph,
-        {
-            type: 'note',
-            elementText: "This is a technical note jako prase",
-        } as SlateNoteParagraph,
-        {
-            type: 'textElement',
-            children: [
-                {
-                    type: 'text',
-                    text: 'a bold text',
-                    bold: true,
-                } as SlateTextParagraph
-            ]
-        } as SlateTextWrapperParagraph
-        ]
-    }
 }

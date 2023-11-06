@@ -4,48 +4,44 @@
  */
 import { Editor, Node } from 'slate'
 import { ReactEditor } from 'slate-react'
+import * as OS from './OctopusScript'
 
 export type CustomEditor = Editor & ReactEditor
 
-export type SlateStudioElement = {
-  type: string,
-  label: string,
-  elid: number,
-  children: (SlateTextWrapperParagraph | SlateTagParagraph | SlateNoteParagraph )[];
+export interface SlateScriptElement extends OS.OctopusScriptElement {  
+  children: SlateParagraph[];
 }
 
+/**
+ * This is an additional wrapping paragraph for the "text". 
+ */
 export type SlateTextWrapperParagraph = {
   type: string,
   children: SlateTextParagraph[]
 }
 
-export type SlateTextParagraph = {
+export interface SlateTextParagraph extends OS.OctopusScriptTextParagraph {} 
+export interface SlateTagParagraph {
   type: string,
-  text: string,
-  bold?: boolean,
-  italic?: boolean,
-  underline?: boolean,
-  dontCount?: boolean,
-  ignore?: boolean,
-  rtl?: boolean
-  }
-
-export type SlateTagParagraph = {
-  type: string,
-  elementText: string,
+  tagText: string,
   dur?: number,
   fontSize?: number,
   foreground: string,
   background: string,
   children: [{text:string}]
 }
-
-export type SlateNoteParagraph = {
+export interface SlateNoteParagraph {
   type: string,
-  elementText: string,
+  noteText: string,
   children: [{text:string}]
 }
 
-export type CustomElement = SlateStudioElement;
+export interface SlatePresenterParagraph extends OS.OctopusScriptPresenterParagraph{}
+export interface SlateCgParagraph extends OS.OctopusScriptCgParagraph{}
+export interface SlateMosParagraph extends OS.OctopusScriptMosParagraph{}
+
+export type SlateParagraph = (SlateTextWrapperParagraph | SlateTagParagraph | SlateNoteParagraph | SlatePresenterParagraph | SlateCgParagraph | SlateMosParagraph);
+
+export type CustomElement = SlateScriptElement;
 export type CustomText = SlateTextParagraph;
 export type SlateScript = CustomElement[];

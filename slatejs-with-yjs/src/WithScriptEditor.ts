@@ -1,6 +1,6 @@
 import { BaseEditor, Editor, createEditor, InsertNodeOperation, Node, NodeOperation, Operation, TextOperation, Transforms, Range, Descendant, Path, NodeEntry } from "slate";
 import { ReactEditor } from "slate-react";
-import { SlateStudioElement, SlateTextParagraph, SlateTextWrapperParagraph } from "./types/SlateScript";
+import { SlateScriptElement, SlateTextParagraph, SlateTextWrapperParagraph } from "./types/SlateScript";
 import { text } from "stream/consumers";
 
 export function withOctopusNormalizedEditor(editor: BaseEditor & ReactEditor) {
@@ -8,7 +8,7 @@ export function withOctopusNormalizedEditor(editor: BaseEditor & ReactEditor) {
     const { isVoid, isInline, normalizeNode } = editor;
 
     editor.isVoid = (element) => {
-        const voidElems = ['tag', 'note'];
+        const voidElems = ['tag', 'note', 'cg','mos','pres'];
         if (voidElems.indexOf(element.type) > -1) {
             return true;
         }
@@ -17,7 +17,7 @@ export function withOctopusNormalizedEditor(editor: BaseEditor & ReactEditor) {
 
     
     editor.isInline = (element) => {
-        const inlineElems = ['tag', 'note', 'textElement'];
+        const inlineElems = ['tag', 'note', 'textElement','cg','mos','pres'];
         if (inlineElems.indexOf(element.type) > -1) {
             return true;
         }
@@ -41,7 +41,7 @@ export function withOctopusNormalizedEditor(editor: BaseEditor & ReactEditor) {
         if (path.length == 1) {
             console.log("NORMALIZING ELEMENT to MERGE consecutive paragraphs");
      
-            const node = rawNode as SlateStudioElement;
+            const node = rawNode as SlateScriptElement;
             if (node.children && node.children.length > 0) {
 
                 let distinctAttrNodeIndex: number = null;
@@ -61,13 +61,13 @@ export function withOctopusNormalizedEditor(editor: BaseEditor & ReactEditor) {
 
                             if ((Object.keys(paragraphTextNode).length - 1) != distinctAttrs.size || distinctAttrs.size == 0) {
                                 nodesMatch = false;
-                                console.log("LENGTHS DONT MATCH ");
+                                console.log("LENGTHS DONT MATCH, WILL NOT RENORMALIZE ");
                             }
                             else {
                                 Object.keys(paragraphTextNode).forEach((key) => {
                                     if (key != "text" && nodesMatch && (!distinctAttrs.has(key) || distinctAttrs.get(key) != paragraphTextNode[key])) {
                                         nodesMatch = false;
-                                        console.log("KEY " + key + " DOESNT MATCH ");
+                                        console.log("KEY " + key + " DOESNT MATCH, WILL NOT RENORMALIZE ");
                                     }
                                 });
                             }
@@ -88,6 +88,7 @@ export function withOctopusNormalizedEditor(editor: BaseEditor & ReactEditor) {
                     }
                 }
                 if (childNodeIndicesMergeFromToMap.size > 0){
+                    console.log ("SOME NODES MUST BE MOVED TO BE PROPERLY NORMALIZED. From->To map:", childNodeIndicesMergeFromToMap);
                     let previousTo = null;
                     let insertPosition = null;
                     childNodeIndicesMergeFromToMap.forEach((to, from)=>{

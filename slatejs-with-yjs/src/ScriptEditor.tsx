@@ -6,8 +6,8 @@ import { BaseEditor, Editor, createEditor, InsertNodeOperation, Node, NodeOperat
 import { isHotkey } from 'is-hotkey';
 import { Editable, ReactEditor, Slate, withReact } from "slate-react";
 import "./styles.css";
-import { OctopusScript } from "./types/OctopusScript";
-import { getTestScript, getSlateTestStudioElement } from "./data/TestScript";
+import * as OS from "./types/OctopusScript";
+import { getTestScript } from "./data/TestScript";
 import { CustomElement, CustomText, SlateTextWrapperParagraph, SlateScript, SlateTextParagraph } from "./types/SlateScript";
 import * as ScriptRenderers from "./ScriptRenderers";
 import * as OctopusScriptMapper from "./mappers/OctopusScriptMapper";
@@ -60,7 +60,7 @@ let sharedOctopusScript = getTestScript();
 //Slate script
 let sharedSlateScript = SlateScriptMapper.mapOctopusScriptToSlateScript(sharedOctopusScript);
 //Slate script to insert Delats for YJS;
-console.log(sharedSlateScript);
+console.log("SHARED SLATE SCRIPT IS", sharedSlateScript);
 const initialInsertDeltas = slateNodesToInsertDelta(sharedSlateScript);
 console.log("Initial insert deltas are:", initialInsertDeltas);
 
@@ -76,7 +76,7 @@ interface Props { }
 //OLD STRUCT
 //const storyId = 3107327319;
 //NEW STRUCT
-const storyId = 3107327319
+const storyId = 3114984709;
 
 export const ScriptEditor: React.FC<Props> = () => {
 
@@ -127,7 +127,7 @@ export const ScriptEditor: React.FC<Props> = () => {
             logElem.innerText = "CHANGES START: \n " + JSON.stringify(changes, null, 4) + "\n-------------\n" + logElem.innerText;
         }
         const scriptChangeListener = new YJsScriptChangeListener(sharedType, sharedTypeCallbackFn);
-        
+
         yDoc.on("update", (update: Uint8Array, origin: any, doc: Y.Doc, tr: Transaction) => {
             console.log("UPDATE EVENT, following are the update / origin / doc / transaction", update, origin, doc, tr);
             const decodedUpdate = Y.decodeUpdate(update);
@@ -239,6 +239,15 @@ export const ScriptEditor: React.FC<Props> = () => {
                 return (ScriptRenderers.renderTag(element, children, attributes));
             case 'textElement':
                 return (ScriptRenderers.renderTextWrappingParagraph(element, children));
+            case 'note':
+                return ScriptRenderers.renderNote(element, children, attributes);
+            case 'cg':
+                return ScriptRenderers.renderCg(element, children, attributes);
+            case 'mos':
+                return ScriptRenderers.renderMos(element, children, attributes);
+            case 'pres':
+                return ScriptRenderers.renderPresenter(element, children, attributes);
+
             default:
                 return null;
         }
@@ -247,12 +256,8 @@ export const ScriptEditor: React.FC<Props> = () => {
     //Paragraph renderer callbacks
     const renderParagraph = useCallback(({ attributes, children, leaf }) => {
         switch (leaf.type) {
-            case 'tag':
-                return ScriptRenderers.renderTag(leaf, children, attributes);
             case 'text':
                 return ScriptRenderers.renderText(leaf, children, attributes);
-            case 'note':
-                return ScriptRenderers.renderNote(leaf, children, attributes);
         }
     }, []);
 
@@ -343,25 +348,25 @@ export const ScriptEditor: React.FC<Props> = () => {
     };
 
     const addStudioElement = () => {
-        yOps.addElement(sharedType, { elid: 99, type: "STUDIO", label: "YJS STUDIO", content: [{ type: "text", text: "Studio Text" }] }, 0);
+        yOps.addElement(sharedType, { elid: 99, type: OS.OctopusScriptElementType.STUDIO, label: "YJS STUDIO", content: [{ type: OS.OctopusScriptParagraphType.text, text: "Studio Text" }] }, 0);
     };
 
     const renameElement = () => {
-        yOps.setElementAttribute(sharedType, 0, "label", "NEW NAME");
+        yOps.setElementAttributes(sharedType, 0, new Map([["label", "NEW NAME"]]));
     };
 
     const addCueIn = () => {
-        yOps.setElementAttribute(sharedType, 0, "cuein", 1000);
+        yOps.setElementAttributes(sharedType, 0, new Map([["cuein", 1000]]));
     };
 
     const removeCueIn = () => {
-        yOps.setElementAttribute(sharedType, 0, "cuein", null);
+        yOps.setElementAttributes(sharedType, 0, new Map([["cuein", null]]));
     };
     const colorTag = () => {
         const attrs = new Map;
         attrs.set("foreground", "#00FF00");
         attrs.set("background", "grey");
-        
+
         yOps.setParagraphAttributes(sharedType, 0, 2, attrs);
     }
 
@@ -370,7 +375,7 @@ export const ScriptEditor: React.FC<Props> = () => {
     };
 
     const addTagParagraph = () => {
-        yOps.addParagraph(sharedType, 0, {type: "tag", text: " THIS IS A VERY NEW TAG ", foreground: "#0000FF", background: "yellow"}, 1)
+        yOps.addParagraph(sharedType, 0, { type: "tag", text: " THIS IS A VERY NEW TAG ", foreground: "#0000FF", background: "yellow" }, 1)
     }
 
     //Editor component
@@ -424,7 +429,7 @@ export const ScriptEditor: React.FC<Props> = () => {
                         Delete Second paragraph in 1st element
                     </button>
                     <button onClick={colorTag}>
-                        Set attribute of a paragraph - Tag's FG color
+                        Set attribute of a paragraph - Tag @3rd FG color
                     </button>
                     <div>TEXT</div>
                     <button onClick={formatItalic}>

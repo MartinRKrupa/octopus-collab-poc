@@ -3,7 +3,7 @@
  */
 
 import React, { ReactElement } from "react";
-import { SlateTextWrapperParagraph, SlateStudioElement, SlateTagParagraph, SlateTextParagraph } from "./types/SlateScript";
+import { SlateTextWrapperParagraph, SlateScriptElement, SlateTagParagraph, SlateTextParagraph, SlateNoteParagraph, SlateCgParagraph, SlatePresenterParagraph, SlateMosParagraph } from "./types/SlateScript";
 
 /**
  * Renders STUDIO Element - header and wrapping its content children
@@ -12,7 +12,7 @@ import { SlateTextWrapperParagraph, SlateStudioElement, SlateTagParagraph, Slate
  * @returns Rendered studio Element as HTML - the parent wrapper element of the studio content
  */
 
-export function renderStudio(studio: SlateStudioElement, children): ReactElement {
+export function renderStudio(studio: SlateScriptElement, children): ReactElement {
   return (
     <div style={{ border: "1px solid black" }}>
       <div style={{ border: "1px solid black", userSelect: "none" }} contentEditable={false}>{studio.label}</div>
@@ -22,6 +22,7 @@ export function renderStudio(studio: SlateStudioElement, children): ReactElement
 }
 
 export function renderTextWrappingParagraph(element: SlateTextWrapperParagraph, children): ReactElement {
+  console.log("Rendering Text Wrapper for", children)
   return (
     <span>{children}</span>
   )
@@ -37,19 +38,49 @@ export function renderTag(tag: SlateTagParagraph, children, attributes): ReactEl
   return (
     /** TOTO JE TROCHU PROBLEM. Ten kurzor tam furt lezie, jak je to inline element ... je potreba to osetrit rucne .. :( */
     <div contentEditable={false} style={{ cursor: "not-allowed", display: "inline-block"}}>
-      <div {...attributes} contentEditable={false} style={{ cursor: "not-allowed", display: "inline-block", background: tag.background, color: tag.foreground }}>{tag.elementText}</div>
-      <span>{children}</span>
+      <div {...attributes} contentEditable={false} style={{ cursor: "not-allowed", display: "inline-block", background: tag.background, color: tag.foreground }}>{tag.tagText}</div>
     </div>
   )
 }
 
-export function renderNote(tag: SlateTagParagraph, children, attributes): ReactElement {
+export function renderNote(note: SlateNoteParagraph, children, attributes): ReactElement {
   return (
     <div style={{ padding: "5px" }}>
-      <div contentEditable={false} style={{ height: "20px", backgroundColor: "#CCCCCC" }}>NOTE</div>
-      <div contentEditable={false} style={{ backgroundColor: "#CCCCCC" }}><span className="slate-ignored" contentEditable={true}>THIS IS EDITABLE BUT NOT INTO SLATE</span></div>
+      <div contentEditable={false} style={{ height: "20px", backgroundColor: "#E4BE3F" }}>NOTE</div>
+      <div contentEditable={false} style={{ backgroundColor: "#EEE6C9" }}><span className="slate-ignored" contentEditable={true}>THIS IS EDITABLE BUT NOT INTO SLATE</span></div>
+      <span {...attributes} style={{ display: "block", backgroundColor: "#EEE6C9", color: "black" }}>{children}</span>
+    </div>
+  )
+}
 
-      <span {...attributes} style={{ display: "block", backgroundColor: "#DDDDDD", color: "black" }}>{children}</span>
+
+export function renderCg(cg: SlateCgParagraph, children, attributes): ReactElement {
+  console.log("Rendering CG for", cg)
+
+  return (
+    <div style={{ padding: "5px" }}>
+      <div contentEditable={false} style={{ height: "20px", backgroundColor: "#232944" }}>CG</div>
+      <div contentEditable={false} style={{ backgroundColor: "#F4F5FA" }}>{cg.lines[0]}</div>
+      <span {...attributes} style={{ display: "block", backgroundColor: "#F4F5FA", color: "black" }}>{children}</span>
+    </div>
+  )
+}
+
+export function renderMos(mos: SlateMosParagraph, children, attributes): ReactElement {
+  return (
+    <div style={{ padding: "5px" }}>
+      <div contentEditable={false} style={{ height: "20px", backgroundColor: "#6B3CBF" }}>{mos.object.mosId}</div>
+      <div contentEditable={false} style={{ backgroundColor: "#F4F5FA" }}><span className="slate-ignored" contentEditable={true}>{mos.object.objId}</span></div>
+      <span {...attributes} style={{ display: "block", backgroundColor: "#F4F5FA", color: "black" }}>{children}</span>
+    </div>
+  )
+}
+
+export function renderPresenter(pres: SlatePresenterParagraph, children, attributes): ReactElement {
+  return (
+    /** TOTO JE TROCHU PROBLEM. Ten kurzor tam furt lezie, jak je to inline element ... je potreba to osetrit rucne .. :( */
+    <div contentEditable={false} style={{ cursor: "not-allowed", display: "inline-block"}}>
+      <div {...attributes} contentEditable={false} style={{ cursor: "not-allowed", display: "inline-block", background: "black", color: "white" }}>{pres.user.id}</div>
     </div>
   )
 }
@@ -73,9 +104,7 @@ export function renderText(paragraph: SlateTextParagraph, children, attributes):
   if (paragraph.underline) {
     children = <u>{children}</u>
   }
-
   return <span {...attributes}>{children}</span>
-
 }
 
 
