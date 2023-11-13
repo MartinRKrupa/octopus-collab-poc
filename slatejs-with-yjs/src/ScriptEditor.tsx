@@ -2,25 +2,23 @@ import * as React from "react";
 import * as Y from 'yjs';
 
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { BaseEditor, Editor, createEditor, InsertNodeOperation, Node, NodeOperation, Operation, TextOperation, Transforms, Range, Descendant, Path, NodeEntry } from "slate";
+import { BaseEditor, Editor, createEditor, Node, Range, Descendant } from "slate";
 import { isHotkey } from 'is-hotkey';
 import { Editable, ReactEditor, Slate, withReact } from "slate-react";
 import "./styles.css";
-import * as OS from "./types/OctopusScript";
-import { getTestScript } from "./data/TestScript";
-import { CustomElement, CustomText, SlateTextWrapperParagraph, SlateScript, SlateTextParagraph } from "./types/SlateScript";
+import * as OS from "octopus-yjs-libs/src/types/OctopusScript";
+import { getTestScript } from "octopus-yjs-libs/src/data/TestScript";
+import { CustomElement, CustomText, SlateScript } from "octopus-yjs-libs/src/types/SlateScript";
 import * as ScriptRenderers from "./ScriptRenderers";
-import * as OctopusScriptMapper from "./mappers/OctopusScriptMapper";
-import * as SlateScriptMapper from "./mappers/SlateScriptMapper";
-import { withYjs, slateNodesToInsertDelta, YjsEditor } from '@slate-yjs/core';
-import { ASClient } from "./utils/activeSync";
+import * as OctopusScriptMapper from "octopus-yjs-libs/src/mappers/OctopusScriptMapper";
+import { withYjs, YjsEditor } from '@slate-yjs/core';
 import { Transaction } from "yjs";
-import { arrayToUint8Array, uint8ArrayToArray } from "./utils/Uint8ArrayUtils";
+import { arrayToUint8Array, uint8ArrayToArray } from "octopus-yjs-libs/src/utils/Uint8ArrayUtils";
 import { shouldPlusButtonShow, togglePlusButton } from "./plusButtonHandler"
-import * as yOps from "./utils/yjsScriptOperations"
+import * as yOps from "octopus-yjs-libs/src/api/YJsScriptOperations"
 import { withOctopusNormalizedEditor } from "./WithScriptEditor";
-import { ScriptChange, YJsScriptChangeListener } from "./YJsScriptChangeListener";
-
+import { ScriptChange, YJsScriptChangeListener } from  "octopus-yjs-libs/src/api/YJsScriptChangeListener";
+import { ASClient } from "./utils/ActiveSync";
 
 declare module 'slate' {
     interface CustomTypes {
@@ -55,28 +53,16 @@ const isMarkActive = (editor: Editor, format: string) => {
     return marks ? marks[format] === true : false
 }
 
-//Legacy script
-let sharedOctopusScript = getTestScript();
-//Slate script
-let sharedSlateScript = SlateScriptMapper.mapOctopusScriptToSlateScript(sharedOctopusScript);
-//Slate script to insert Delats for YJS;
-console.log("SHARED SLATE SCRIPT IS", sharedSlateScript);
-const initialInsertDeltas = slateNodesToInsertDelta(sharedSlateScript);
-console.log("Initial insert deltas are:", initialInsertDeltas);
-
 //YJS CRDT
 const initialYDoc = new Y.Doc()
-//Correct data type fo SlateJS is XMLText
 const initialSharedDoc = initialYDoc.get("content", Y.XmlText) as Y.XmlText;
-// Load the initial value into the yjs document
-initialSharedDoc.applyDelta(initialInsertDeltas);
+const mockOctopusScript = getTestScript();
+yOps.initializeSharedTypeFromOctopusScript(initialSharedDoc, mockOctopusScript);
+
 interface Props { }
 
-//NOTE: This story ID MUST EXIST in the backend, otherwise the solution does not work ...
-//OLD STRUCT
-//const storyId = 3107327319;
-//NEW STRUCT
-const storyId = 3114984709;
+//NOTE: This story ID MUST EXIST in the backend, otherwise the AS does not provide Data ...
+const storyId = 3115279239;
 
 export const ScriptEditor: React.FC<Props> = () => {
 
@@ -216,7 +202,7 @@ export const ScriptEditor: React.FC<Props> = () => {
 
     //NOTE: Editor initialization
     const [editor, setEditor] = useState(() => {
-        const slateJSWithYJSEditor: BaseEditor & ReactEditor = withYjs(withOctopusNormalizedEditor(withReact(createEditor())), sharedType);
+        const slateJSWithYJSEditor: BaseEditor & ReactEditor & YjsEditor = withYjs(withOctopusNormalizedEditor(withReact(createEditor())), sharedType);
         return slateJSWithYJSEditor;
     });
 
@@ -403,7 +389,8 @@ export const ScriptEditor: React.FC<Props> = () => {
                     />
                 </Slate>
                 <div>
-                    <div>Direct YJS doc manipulation</div>
+                    <div>&nbsp;</div>
+                    <div>Direct YJS doc manipulation (VIA JS API)</div>
                     <div>ELEMENT</div>
 
                     <button onClick={addStudioElement}>

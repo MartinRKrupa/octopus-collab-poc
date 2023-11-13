@@ -6,5 +6,22 @@ module.exports = {
         hints: false,
         maxEntrypointSize: 512000,
         maxAssetSize: 512000
+    },
+    module: {
+        rules: [
+            {
+                test: /\.ts$/,
+                use: {
+                    loader: 'babel-loader',
+                    options: {
+                        presets: [
+                            '@babel/preset-env',
+                            '@babel/preset-typescript'
+                        ]
+                    }
+                },
+                exclude: /node_modules/
+            }
+        ]
     }
 };

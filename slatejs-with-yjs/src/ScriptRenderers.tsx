@@ -2,8 +2,8 @@
  * Functions rendering Slate JS's Elements and Texts  
  */
 
-import React, { ReactElement } from "react";
-import { SlateTextWrapperParagraph, SlateScriptElement, SlateTagParagraph, SlateTextParagraph, SlateNoteParagraph, SlateCgParagraph, SlatePresenterParagraph, SlateMosParagraph } from "./types/SlateScript";
+import { ReactElement } from "react";
+import { SlateTextWrapperParagraph, SlateScriptElement, SlateTagParagraph, SlateTextNode, SlateNoteParagraph, SlateCgParagraph, SlatePresenterParagraph, SlateMosParagraph } from "octopus-yjs-libs/src/types/SlateScript";
 
 /**
  * Renders STUDIO Element - header and wrapping its content children
@@ -59,7 +59,7 @@ export function renderCg(cg: SlateCgParagraph, children, attributes): ReactEleme
 
   return (
     <div style={{ padding: "5px" }}>
-      <div contentEditable={false} style={{ height: "20px", backgroundColor: "#232944" }}>CG</div>
+      <div contentEditable={false} style={{ height: "20px", backgroundColor: "#232944", color: "white" }}>CG</div>
       <div contentEditable={false} style={{ backgroundColor: "#F4F5FA" }}>{cg.lines[0]}</div>
       <span {...attributes} style={{ display: "block", backgroundColor: "#F4F5FA", color: "black" }}>{children}</span>
     </div>
@@ -92,7 +92,7 @@ export function renderPresenter(pres: SlatePresenterParagraph, children, attribu
  * @returns - decorated Text as HTML
  */
 
-export function renderText(paragraph: SlateTextParagraph, children, attributes): ReactElement {
+export function renderText(paragraph: SlateTextNode, children, attributes): ReactElement {
   if (paragraph.bold) {
     children = <strong>{children}</strong>
   }

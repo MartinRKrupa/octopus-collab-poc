@@ -1,14 +1,18 @@
-import { BaseEditor, Editor, createEditor, InsertNodeOperation, Node, NodeOperation, Operation, TextOperation, Transforms, Range, Descendant, Path, NodeEntry } from "slate";
+import { BaseEditor, Node, Transforms,  } from "slate";
 import { ReactEditor } from "slate-react";
-import { SlateScriptElement, SlateTextParagraph, SlateTextWrapperParagraph } from "./types/SlateScript";
-import { text } from "stream/consumers";
+import { SlateScriptElement, SlateTextWrapperParagraph } from "octopus-yjs-libs/src/types/SlateScript";
 
+/**
+ * POC of normalizing functions ensuring keeping required script structure at all times
+ * @param editor 
+ * @returns 
+ */
 export function withOctopusNormalizedEditor(editor: BaseEditor & ReactEditor) {
 
     const { isVoid, isInline, normalizeNode } = editor;
 
     editor.isVoid = (element) => {
-        const voidElems = ['tag', 'note', 'cg','mos','pres'];
+        const voidElems = ['tag','note','cg','mos','pres'];
         if (voidElems.indexOf(element.type) > -1) {
             return true;
         }
@@ -17,7 +21,7 @@ export function withOctopusNormalizedEditor(editor: BaseEditor & ReactEditor) {
 
     
     editor.isInline = (element) => {
-        const inlineElems = ['tag', 'note', 'textElement','cg','mos','pres'];
+        const inlineElems = ['tag','note','textElement','cg','mos','pres'];
         if (inlineElems.indexOf(element.type) > -1) {
             return true;
         }
@@ -85,6 +89,10 @@ export function withOctopusNormalizedEditor(editor: BaseEditor & ReactEditor) {
                                 if (key != "text") distinctAttrs.set(key, paragraphTextNode[key]);
                             });
                         }
+                    }
+                    else {
+                        //NOTE: If a different than TEXT paragraph comes along, reset the comparison.
+                        if (paragraphElementNode.type != null && paragraphElementNode.type != "textElement") distinctAttrNodeIndex = null;
                     }
                 }
                 if (childNodeIndicesMergeFromToMap.size > 0){

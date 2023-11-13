@@ -1,0 +1,43 @@
+{
+  "name": "octopus-yjs-libs",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "typescript": "^4.9.5",
+    "yjs": "^13.6.8"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "exports": {
+    ".": "./dist/",
+    "./api/": "./dist/api/",
+    "./data/": "./dist/data/",
+    "./mappers/": "./dist/mappers/",
+    "./types/": "./dist/types/",
+    "./utils/": "./dist/utils/"    
+  },
+  "typesVersions": {
+    "*": {
+      "*": ["./dist/*"]
+    }
+  }  
+}

@@ -3,11 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@automerge/automerge": "^2.0.3",
     "@slate-yjs/core": "^1.0.2",
-    "@testing-library/jest-dom": "^5.17.0",
-    "@testing-library/react": "^13.4.0",
-    "@testing-library/user-event": "^13.5.0",
     "@types/jest": "^27.5.2",
     "@types/node": "^16.18.50",
     "@types/react": "^18.2.21",
@@ -28,7 +24,8 @@
     "typescript": "^4.9.5",
     "web-vitals": "^2.1.4",
     "y-websocket": "^1.5.0",
-    "yjs": "^13.6.8"
+    "yjs": "^13.6.8",
+    "octopus-yjs-libs": "file:../lib"
   },
   "scripts": {
     "start": "craco start",
